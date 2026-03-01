@@ -1,19 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { authkitMiddleware } from '@workos-inc/authkit-nextjs'
+import { NextFetchEvent, NextRequest, NextResponse } from 'next/server'
 
 /**
- * Combined proxy: IP allowlist + WorkOS AuthKit session management.
+ * Combined proxy: IP allowlist + security headers + WorkOS AuthKit session.
  *
- * 1. IP check runs first (fail-closed).
- * 2. If the IP passes, WorkOS AuthKit middleware handles session/auth.
- *
- * Set ALLOWED_IPS as a comma-separated list of IPs in your environment
- * (e.g. Vercel → Settings → Environment Variables → private).
- *   ALLOWED_IPS=203.0.113.42,198.51.100.7
- *   ALLOWED_IPS=203.0.113.0/24,198.51.100.7
- *
- * Set ALLOWED_IPS=* to disable the IP restriction.
- * If ALLOWED_IPS is unset or empty, all traffic is blocked (fail-closed).
- * Localhost is auto-allowed only in development.
+ * 1. CORS preflight is handled first.
+ * 2. IP check runs (fail-closed unless ALLOWED_IPS=*).
+ * 3. Security headers are applied.
+ * 4. WorkOS AuthKit middleware manages the session cookie / token refresh.
+ *    The landing page ("/") and static assets are unauthenticated.
  */
 
 const LOCALHOST = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
@@ -104,7 +99,20 @@ function applySecurityHeaders(response: NextResponse): NextResponse {
   return response
 }
 
-export default async function middleware(request: NextRequest) {
+const workosMiddleware = authkitMiddleware({
+  middlewareAuth: {
+    enabled: true,
+    unauthenticatedPaths: [
+      '/',
+      '/sign-in',
+      '/download',
+      '/callback',
+      '/api/download',
+    ],
+  },
+})
+
+export default async function proxy(request: NextRequest, event: NextFetchEvent) {
   // CORS preflight
   if (request.method === 'OPTIONS') {
     return new NextResponse(null, {
@@ -118,13 +126,22 @@ export default async function middleware(request: NextRequest) {
     })
   }
 
+  // IP allowlist check
   const blocked = checkIp(request)
   if (blocked) return blocked
 
-  const response = NextResponse.next()
-  return applySecurityHeaders(response)
+  // WorkOS AuthKit session management (handles redirect for unauthenticated users)
+  const response = await workosMiddleware(request, event)
+
+  // Apply security headers to the response
+  if (response) {
+    return applySecurityHeaders(response as NextResponse)
+  }
+
+  const next = NextResponse.next()
+  return applySecurityHeaders(next)
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|favicon.png|apple-touch-icon.png).*)'],
 }

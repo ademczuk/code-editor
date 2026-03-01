@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { Icon } from '@iconify/react'
+import { useAuth } from '@workos-inc/authkit-nextjs/components'
 import { useGateway } from '@/context/gateway-context'
 import { useRepo } from '@/context/repo-context'
 import { useEditor } from '@/context/editor-context'
@@ -23,8 +24,6 @@ import { TerminalPanel } from '@/components/terminal-panel'
 import { ChangesPanel } from '@/components/changes-panel'
 import Landing from '@/components/landing'
 import { EnginePanel } from '@/components/engine-panel'
-
-const STORAGE_REMEMBER = 'code-editor:remember'
 
 const IMAGE_MIME_BY_EXT: Record<string, string> = {
   png: 'image/png',
@@ -77,187 +76,142 @@ function toDataUrl(base64: string, mimeType: string): string {
   return `data:${mimeType};base64,${base64.replace(/\n/g, '')}`
 }
 
-// ─── Gateway Login ──────────────────────────────────────────────
+// ─── Sponsor Gate ───────────────────────────────────────────────
 
-function GatewayLogin() {
-  const { status, error, connect } = useGateway()
-  const [url, setUrl] = useState('')
-  const [password, setPassword] = useState('')
-  const [remember, setRemember] = useState(true)
-  const [showUrl, setShowUrl] = useState(false)
+type SponsorStatus =
+  | { state: 'loading' }
+  | { state: 'ok'; tier: string }
+  | { state: 'error'; code: string; message: string; sponsorUrl?: string }
+
+function SponsorGate({ children }: { children: React.ReactNode }) {
+  const { user, loading: authLoading, signOut } = useAuth()
+  const [sponsor, setSponsor] = useState<SponsorStatus>({ state: 'loading' })
+  const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
-    try {
-      const savedUrl = localStorage.getItem('code-editor:gateway-url')
-      if (savedUrl) setUrl(savedUrl)
-      const savedRemember = localStorage.getItem(STORAGE_REMEMBER)
-      if (savedRemember === 'false') setRemember(false)
-    } catch { }
-  }, [])
+    if (authLoading || !user) return
+    setSponsor({ state: 'loading' })
 
-  const loading = status === 'connecting' || status === 'authenticating'
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/check-sponsor')
+        if (cancelled) return
+        if (res.ok) {
+          const data = await res.json() as { tier?: string }
+          setSponsor({ state: 'ok', tier: data.tier ?? '' })
+        } else {
+          const data = await res.json() as { error?: string; message?: string; sponsor_url?: string }
+          setSponsor({
+            state: 'error',
+            code: data.error ?? 'unknown',
+            message: data.message ?? 'Sponsorship verification failed.',
+            sponsorUrl: data.sponsor_url,
+          })
+        }
+      } catch {
+        if (!cancelled) {
+          setSponsor({ state: 'error', code: 'network', message: 'Could not verify sponsorship. Please try again.' })
+        }
+      }
+    })()
+    return () => { cancelled = true }
+  }, [user, authLoading, retryCount])
 
-  const handleConnect = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!url.trim() || !password.trim()) return
-    try { localStorage.setItem(STORAGE_REMEMBER, String(remember)) } catch { }
-    connect(url.trim(), password.trim())
+  if (authLoading || sponsor.state === 'loading') {
+    return (
+      <div className="h-full flex items-center justify-center bg-[var(--bg)]">
+        <div className="flex items-center gap-3 text-[var(--text-tertiary)]">
+          <Icon icon="lucide:loader-2" width={18} height={18} className="animate-spin" />
+          <span className="text-sm">Verifying access…</span>
+        </div>
+      </div>
+    )
   }
 
-  return (
-    <div className="h-full overflow-hidden flex items-center justify-center px-4 bg-[var(--bg)]">
-      <div className="w-full max-w-[400px] space-y-5 animate-fade-in-up">
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 sm:p-8 shadow-xl relative overflow-hidden">
-          {/* Subtle gradient accent at top */}
-          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[var(--brand)] to-transparent opacity-40" />
-
-          <div className="text-center mb-6">
-            <div className="relative w-12 h-12 rounded-xl mx-auto mb-4 flex items-center justify-center bg-gradient-to-br from-[var(--brand)] to-[color-mix(in_srgb,var(--brand)_80%,#000)] shadow-lg">
-              <Icon icon="lucide:code" width={22} height={22} className="text-white" />
-              <div className="absolute -inset-1 rounded-xl bg-[var(--brand)] opacity-15 blur-md" />
-            </div>
-            <h1 className="text-base font-semibold tracking-tight text-[var(--text-primary)]">
-              code-editor
-            </h1>
-            <p className="text-sm mt-1 text-[var(--text-tertiary)]">
-              Connect to your OpenClaw gateway
-            </p>
-          </div>
-
-          <form onSubmit={handleConnect} className="space-y-4">
-            {error && (
-              <div className="rounded-lg bg-[color-mix(in_srgb,var(--color-deletions)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-deletions)_25%,transparent)]">
-                <div className="flex items-start gap-2 text-sm px-3 py-2.5 text-[var(--color-deletions)]">
-                  <Icon icon="lucide:alert-circle" width={16} height={16} className="shrink-0 mt-0.5" />
-                  <span className="text-[12px]">{error}</span>
-                </div>
-                {/pairing/i.test(error) && (
-                  <div className="px-3 pb-3 space-y-2">
-                    <p className="text-xs leading-relaxed text-[var(--text-secondary)]">
-                      This device hasn&apos;t been approved on your gateway yet. On the machine running OpenClaw:
-                    </p>
-                    <div className="rounded-md px-3 py-2.5 font-mono text-xs leading-relaxed space-y-0.5 bg-[var(--bg)] text-[var(--text-primary)]">
-                      <p className="text-[var(--text-tertiary)]"># 1. List pending devices</p>
-                      <p>openclaw devices list</p>
-                      <p className="text-[var(--text-tertiary)] pt-1"># 2. Approve the entry</p>
-                      <p>openclaw devices approve &lt;request-id&gt;</p>
-                    </div>
-                    <p className="text-xs leading-relaxed text-[var(--text-tertiary)]">
-                      Then click <strong className="text-[var(--text-secondary)]">Connect</strong> again.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-[var(--text-secondary)]">Gateway URL</label>
-              <div className="relative">
-                <input
-                  type={showUrl ? 'text' : 'password'}
-                  value={url}
-                  onChange={e => setUrl(e.target.value)}
-                  placeholder="https://your-gateway.example.com"
-                  required
-                  autoComplete="url"
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-subtle)] border border-[var(--border)] text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none focus:border-[var(--brand)] transition-colors pr-9"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowUrl(v => !v)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors cursor-pointer"
-                  tabIndex={-1}
-                >
-                  <Icon icon={showUrl ? 'lucide:eye' : 'lucide:eye-off'} width={14} height={14} />
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-[var(--text-secondary)]">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="Gateway password"
-                required
-                autoComplete="current-password"
-                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-subtle)] border border-[var(--border)] text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none focus:border-[var(--brand)] transition-colors"
-              />
-            </div>
-
-            <label className="flex items-center gap-2.5 cursor-pointer py-0.5">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={remember}
-                onClick={() => setRemember(!remember)}
-                className="relative w-9 h-5 rounded-full transition-colors duration-150 shrink-0 cursor-pointer border"
-                style={{
-                  background: remember ? 'color-mix(in srgb, var(--brand) 30%, transparent)' : 'var(--bg-subtle)',
-                  borderColor: remember ? 'color-mix(in srgb, var(--brand) 40%, transparent)' : 'var(--border)',
-                }}
-              >
-                <span
-                  className="absolute top-[3px] left-[3px] w-3.5 h-3.5 rounded-full transition-all duration-150"
-                  style={{
-                    background: remember ? 'var(--brand)' : '#555',
-                    transform: remember ? 'translateX(14px)' : 'translateX(0)',
-                  }}
-                />
-              </button>
-              <span className="text-xs text-[var(--text-secondary)]">Remember credentials</span>
-            </label>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed relative overflow-hidden group"
-              style={{
-                backgroundColor: 'var(--brand)',
-                color: 'white',
-              }}
-            >
-              {loading && (
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
-              )}
-              <span className="flex items-center justify-center gap-2">
-                {loading && <Icon icon="lucide:loader-2" width={14} height={14} className="animate-spin" />}
-                {loading
-                  ? status === 'authenticating' ? 'Authenticating\u2026' : 'Connecting\u2026'
-                  : 'Connect'}
-              </span>
-            </button>
-          </form>
-
-          <p className="text-center text-xs mt-4 text-[var(--text-tertiary)]">
-            {remember ? 'Credentials stored locally in your browser only.' : 'Credentials will not be saved.'}
-          </p>
+  if (!user) {
+    return (
+      <div className="h-full flex items-center justify-center bg-[var(--bg)]">
+        <div className="text-center space-y-3 text-[var(--text-tertiary)]">
+          <p className="text-sm">You need to sign in to continue.</p>
+          <a href="/callback" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[var(--brand)] text-white hover:opacity-90 transition-opacity">
+            Sign In
+          </a>
         </div>
+      </div>
+    )
+  }
 
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-5 py-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Icon icon="lucide:shield" width={13} height={13} className="text-[var(--text-tertiary)]" />
-            <span className="text-xs font-medium text-[var(--text-secondary)]">Your credentials are safe</span>
-          </div>
-          <div className="space-y-2.5">
-            {[
-              { icon: 'lucide:eye-off', bold: 'Never sent to our servers.', text: 'Your gateway password stays on your device.' },
-              { icon: 'lucide:wifi', bold: 'Direct connection.', text: 'Browser connects straight to your gateway via WebSocket.' },
-              { icon: 'lucide:shield', bold: 'Local storage only.', text: 'Credentials saved in localStorage — never in cookies or on a server.' },
-            ].map(({ icon, bold, text }) => (
-              <div key={bold} className="flex items-start gap-2.5">
-                <Icon icon={icon} width={13} height={13} className="mt-0.5 shrink-0 text-[var(--text-tertiary)]" />
-                <p className="text-xs leading-relaxed text-[var(--text-tertiary)]">
-                  <span className="text-[var(--text-secondary)]">{bold}</span> {text}
-                </p>
+  if (sponsor.state === 'error') {
+    const isGitHubMissing = sponsor.code === 'github_username_required'
+    const isNotSponsored = sponsor.code === 'not_sponsored' || sponsor.code === 'tier_too_low'
+
+    return (
+      <div className="h-full overflow-hidden flex items-center justify-center px-4 bg-[var(--bg)]">
+        <div className="w-full max-w-[420px] space-y-5 animate-fade-in-up">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 sm:p-8 shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[var(--brand)] to-transparent opacity-40" />
+
+            <div className="text-center mb-6">
+              <div className="relative w-12 h-12 rounded-xl mx-auto mb-4 flex items-center justify-center bg-gradient-to-br from-[var(--brand)] to-[color-mix(in_srgb,var(--brand)_80%,#000)] shadow-lg">
+                <Icon icon={isGitHubMissing ? 'lucide:github' : 'lucide:heart'} width={22} height={22} className="text-white" />
+                <div className="absolute -inset-1 rounded-xl bg-[var(--brand)] opacity-15 blur-md" />
               </div>
-            ))}
+
+              <h1 className="text-base font-semibold tracking-tight text-[var(--text-primary)]">
+                {isGitHubMissing ? 'GitHub Account Required' : isNotSponsored ? 'Sponsorship Required' : 'Access Error'}
+              </h1>
+              <p className="text-sm mt-2 text-[var(--text-tertiary)] leading-relaxed">
+                {sponsor.message}
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {isGitHubMissing && (
+                <p className="text-xs text-[var(--text-tertiary)] leading-relaxed text-center">
+                  Please sign in using your GitHub account so we can verify your sponsorship.
+                </p>
+              )}
+
+              {sponsor.sponsorUrl && (
+                <a
+                  href={sponsor.sponsorUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-medium transition-all bg-[var(--brand)] text-white hover:opacity-90"
+                >
+                  <Icon icon="lucide:heart" width={14} height={14} />
+                  Sponsor on GitHub
+                </a>
+              )}
+
+              <button
+                onClick={() => setRetryCount(c => c + 1)}
+                className="w-full py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer border border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+              >
+                Retry Verification
+              </button>
+
+              <button
+                onClick={() => signOut()}
+                className="w-full py-2 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors cursor-pointer"
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+
+          <div className="text-center">
+            <p className="text-xs text-[var(--text-tertiary)]">
+              Signed in as <span className="text-[var(--text-secondary)]">{user.email}</span>
+            </p>
           </div>
         </div>
       </div>
-    </div>
-  )
+    )
+  }
+
+  return <>{children}</>
 }
 
 // ─── Editor Layout ──────────────────────────────────────────────
@@ -786,14 +740,36 @@ function EditorLayout() {
 // ─── Root Page ──────────────────────────────────────────────────
 
 export default function EditorPage() {
-  const { status } = useGateway()
-  const local = useLocal()
-  const [showLogin, setShowLogin] = useState(false)
+  const { user, loading } = useAuth()
+  const [showEditor, setShowEditor] = useState(false)
 
-  if (status !== 'connected') {
-    if (showLogin) return <GatewayLogin />
-    return <Landing onEnter={() => setShowLogin(true)} />
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center bg-[var(--bg)]">
+        <Icon icon="lucide:loader-2" width={20} height={20} className="animate-spin text-[var(--text-tertiary)]" />
+      </div>
+    )
   }
 
-  return <EditorLayout />
+  // Unauthenticated users see the landing page
+  if (!user) {
+    if (showEditor) {
+      if (typeof window !== 'undefined') {
+        window.location.href = '/sign-in'
+      }
+      return (
+        <div className="h-full flex items-center justify-center bg-[var(--bg)]">
+          <Icon icon="lucide:loader-2" width={20} height={20} className="animate-spin text-[var(--text-tertiary)]" />
+        </div>
+      )
+    }
+    return <Landing onEnter={() => setShowEditor(true)} />
+  }
+
+  // Authenticated users go through sponsor gate → editor
+  return (
+    <SponsorGate>
+      <EditorLayout />
+    </SponsorGate>
+  )
 }

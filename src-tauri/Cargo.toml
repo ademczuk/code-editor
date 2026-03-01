@@ -12,7 +12,7 @@ rust-version = "1.77.2"
 
 [lib]
 name = "app_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+crate-type = ["staticlib", "cdylib", "lib"]
 
 [build-dependencies]
 tauri-build = { version = "2.5.4", features = [] }
@@ -27,3 +27,9 @@ portable-pty = "0.8"
 tauri-plugin-window-state = "2.4.1"
 window-vibrancy = "0.7.1"
 tauri-plugin-dialog = "2.6.0"
+
+[profile.release]
+opt-level = "s"
+lto = "thin"
+codegen-units = 1
+strip = true

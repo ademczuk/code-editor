@@ -105,7 +105,7 @@ function AnimatedCounter({ end, duration = 2000, label, suffix = '' }: { end: nu
   }, [end, duration])
   return (
     <div ref={ref} className="text-center">
-      <span className="text-2xl sm:text-3xl font-semibold tracking-tight" style={{ color: 'var(--kn-text-secondary)' }}>{count.toLocaleString()}{suffix}</span>
+      <span className="text-2xl sm:text-3xl font-semibold tracking-tight" style={{ color: 'var(--kn-text-secondary)' }}>{String(count)}{suffix}</span>
       <p className="text-xs mt-1" style={{ color: 'var(--kn-text-dim)' }}>{label}</p>
     </div>
   )
@@ -315,7 +315,7 @@ function AgentPreview() {
 function IntegrationSteps() {
   const [step, setStep] = useState(0)
   const steps = [
-    { label: 'Connect', desc: 'Enter your OpenClaw gateway URL', icon: 'lucide:plug' },
+    { label: 'Sign In', desc: 'Authenticate with your account', icon: 'lucide:log-in' },
     { label: 'Open', desc: 'Open a local folder or pick a GitHub repo', icon: 'lucide:folder-open' },
     { label: 'Code', desc: 'Edit with AI completions, review with diff', icon: 'lucide:code' },
   ]
@@ -361,9 +361,18 @@ function FAQItem({ q, a }: { q: string; a: string }) {
    MAIN LANDING
    ═══════════════════════════════════════════════════════════════ */
 
-export default function Landing({ onEnter }: { onEnter: () => void }) {
+export default function Landing({ onEnter }: { onEnter?: () => void }) {
+  const handleEnter = () => {
+    if (onEnter) {
+      onEnter()
+    } else {
+      window.location.href = '/sign-in'
+    }
+  }
   const [navSolid, setNavSolid] = useState(false)
+  const [year, setYear] = useState('')
   useEffect(() => {
+    setYear(String(new Date().getFullYear()))
     const onScroll = () => setNavSolid(window.scrollY > 60)
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
@@ -384,7 +393,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
           <div className="kn-nav-links">
             <a href="https://github.com/OpenKnots/code-editor" target="_blank" rel="noopener noreferrer" className="kn-nav-link hidden sm:block">GitHub</a>
             <a href="https://docs.openclaw.ai" target="_blank" rel="noopener noreferrer" className="kn-nav-link hidden sm:block">Docs</a>
-            <button onClick={onEnter} className="kn-nav-signin cursor-pointer">Open Editor</button>
+            <button onClick={handleEnter} className="kn-nav-signin cursor-pointer">Open Editor</button>
           </div>
         </nav>
       </header>
@@ -405,7 +414,11 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
         </Reveal>
 
         <Reveal delay={120}>
-          <h1 className="kn-headline">Your Code. Your Agent.<br /> <span style={{ background: 'linear-gradient(90deg, var(--kn-accent), var(--kn-accent-bright, #C4B5FD))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Your Machine.</span></h1>
+          <h1 className="kn-headline">
+            <span>Your Code. Your Agent.</span>
+            <br />
+            <span style={{ background: 'linear-gradient(90deg, var(--kn-accent), var(--kn-accent-bright, #C4B5FD))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Your Machine.</span>
+          </h1>
         </Reveal>
 
         <Reveal delay={200}>
@@ -416,7 +429,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
 
         <Reveal delay={280}>
           <div className="kn-actions">
-            <button onClick={onEnter} className="kn-btn-primary cursor-pointer">Open Editor</button>
+            <button onClick={handleEnter} className="kn-btn-primary cursor-pointer">Open Editor</button>
             <a href="https://github.com/OpenKnots/code-editor" target="_blank" rel="noopener noreferrer" className="kn-btn-ghost" style={{ textDecoration: 'none' }}>
               <Icon icon="lucide:github" width={16} height={16} />
               <span className="ml-1.5">Source Code</span>
@@ -526,7 +539,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
         <Reveal className="text-center mb-12">
           <p className="text-xs font-medium uppercase tracking-[0.2em] mb-3" style={{ color: 'var(--kn-accent)', opacity: 0.8 }}>Getting Started</p>
           <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight max-w-screen-xl mx-auto" style={{ color: 'var(--kn-text-secondary)' }}>Three steps. That&apos;s it.</h2>
-          <p className="mt-3 text-sm max-w-screen-xl mx-auto" style={{ color: 'var(--kn-text-dim)' }}>Connect to your <span style={{ color: 'var(--kn-accent)', opacity: 0.7 }}>OpenClaw</span> gateway and start coding.</p>
+          <p className="mt-3 text-sm max-w-screen-xl mx-auto" style={{ color: 'var(--kn-text-dim)' }}>Sign in, pick a project, and start coding.</p>
         </Reveal>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -571,7 +584,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
             <FAQItem q="What's the difference between Local and Remote mode?" a="Local mode reads and writes files directly on your filesystem via the Tauri desktop app. Remote mode uses the GitHub API to browse and edit repos in the browser. Both modes support AI features via your gateway." />
             <FAQItem q="Which AI models are supported?" a="Any model your OpenClaw gateway supports — Claude, GPT, Gemini, Llama, Mistral, and more. The editor doesn't care about the model; it sends requests to your gateway and streams the response." />
             <FAQItem q="How is this different from Cursor or Copilot?" a="You own the infrastructure. Your code never touches a third-party server — the gateway runs on your machine. Plus you get full agent chat (not just completions), slash commands for structured actions, and a desktop app under 10MB." />
-            <FAQItem q="Is it free?" a="Completely. Open source, no accounts, no telemetry. You pay only for the AI models you use through your own API keys on your gateway." />
+            <FAQItem q="How do I get access?" a="Sign in with your account and be a GitHub Sponsor at the $25/month tier or higher. Sponsorship is verified automatically when you sign in." />
           </div>
         </Reveal>
       </section>
@@ -583,7 +596,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
             <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight max-w-screen-xl mx-auto mb-3" style={{ color: 'var(--kn-text-secondary)' }}>Your code. Your agent. Your rules.</h2>
             <p className="text-sm max-w-screen-xl mx-auto mb-7" style={{ color: 'var(--kn-text-muted)' }}>No accounts. No telemetry. Just a code editor that <span style={{ background: 'linear-gradient(90deg, var(--kn-accent), var(--kn-accent-bright, #C4B5FD))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>understands your codebase</span>.</p>
             <div className="kn-actions" style={{ justifyContent: 'center' }}>
-              <button onClick={onEnter} className="kn-btn-primary cursor-pointer">Open Editor</button>
+              <button onClick={handleEnter} className="kn-btn-primary cursor-pointer">Open Editor</button>
               <a href="https://github.com/OpenKnots/code-editor" target="_blank" rel="noopener noreferrer" className="kn-btn-ghost" style={{ textDecoration: 'none' }}>View Source</a>
             </div>
           </div>
@@ -600,7 +613,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
           <div className="kn-footer-links">
             <a href="https://github.com/OpenKnots/code-editor" target="_blank" rel="noopener noreferrer">GitHub</a>
             <a href="https://docs.openclaw.ai" target="_blank" rel="noopener noreferrer">Docs</a>
-            <span>&copy; {new Date().getFullYear()}</span>
+            <span>&copy; {year}</span>
           </div>
         </div>
       </footer>

@@ -1,0 +1,34 @@
+---
+description: Prefer Next.js rewrites/proxy in next.config.ts over custom middleware.ts for routing, proxying, and request forwarding
+alwaysApply: true
+---
+
+# Use Proxy Rewrites, Not Middleware
+
+This project handles routing, proxying, and request forwarding through Next.js `rewrites` in `next.config.ts` — **not** through `middleware.ts`.
+
+## Rules
+
+- **Never create or modify `middleware.ts`** for proxying, redirecting, or forwarding requests. Use `rewrites` (or `redirects`) in `next.config.ts` instead.
+- If you need to proxy an external API, add a `rewrites()` entry in `next.config.ts`:
+
+```ts
+async rewrites() {
+  return [
+    {
+      source: '/api/proxy/:path*',
+      destination: 'https://external-api.example.com/:path*',
+    },
+  ]
+}
+```
+
+- For auth-gated or IP-restricted routes, use **API route handlers** (`app/api/*/route.ts`) with server-side checks, not middleware interception.
+- Security headers belong in `next.config.ts` via the `headers()` function, not middleware.
+- CORS handling should use `headers()` in `next.config.ts` or per-route API handler logic.
+
+## Why
+
+- `middleware.ts` runs on the Edge Runtime with limited Node.js API support, making it fragile for complex logic.
+- `rewrites` are declarative, easier to audit, and handled at the routing layer before code executes.
+- Keeping proxy/routing config in `next.config.ts` provides a single source of truth for all request routing.
