@@ -44,6 +44,7 @@ interface TreeFile {
 }
 
 function buildTree(nodes: TreeNode[]): (TreeDir | TreeFile)[] {
+  if (!Array.isArray(nodes)) return []
   const root: TreeDir = { name: '', path: '', children: [], type: 'dir' }
 
   for (const node of nodes) {
