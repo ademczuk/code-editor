@@ -14,6 +14,12 @@ export function CodeEditor() {
   const { files, activeFile, updateFileContent } = useEditor()
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
   const [monacoReady, setMonacoReady] = useState(false)
+  const [vimEnabled, setVimEnabled] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('code-editor:vim-mode') === 'true'
+  })
+  const vimModeRef = useRef<{ dispose: () => void } | null>(null)
+  const vimStatusRef = useRef<HTMLDivElement>(null)
   const [inlineEdit, setInlineEdit] = useState<{
     visible: boolean
     position: { top: number; left: number }
@@ -117,6 +123,40 @@ export function CodeEditor() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [file, markdownModes])
+
+  // Vim mode activation
+  useEffect(() => {
+    const editor = editorRef.current
+    if (!editor || !monacoReady) return
+
+    // Cleanup previous vim instance
+    if (vimModeRef.current) {
+      vimModeRef.current.dispose()
+      vimModeRef.current = null
+    }
+
+    if (!vimEnabled) return
+
+    let disposed = false
+    ;(async () => {
+      const { initVimMode } = await import('monaco-vim')
+      if (disposed || !vimStatusRef.current) return
+      vimModeRef.current = initVimMode(editor, vimStatusRef.current)
+    })()
+
+    return () => {
+      disposed = true
+      if (vimModeRef.current) {
+        vimModeRef.current.dispose()
+        vimModeRef.current = null
+      }
+    }
+  }, [vimEnabled, monacoReady, activeFile])
+
+  // Persist vim mode preference
+  useEffect(() => {
+    localStorage.setItem('code-editor:vim-mode', String(vimEnabled))
+  }, [vimEnabled])
 
   // Command palette -> Monaco command bridge
   useEffect(() => {
@@ -299,11 +339,23 @@ export function CodeEditor() {
             <span className="text-[9px] text-[var(--brand)] font-medium ml-1 shrink-0">modified</span>
           )}
         </div>
-        {isMarkdown && (
-          <div className="shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Vim mode toggle */}
+          <button
+            onClick={() => setVimEnabled(v => !v)}
+            className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors cursor-pointer ${
+              vimEnabled
+                ? 'bg-[color-mix(in_srgb,var(--brand)_15%,transparent)] text-[var(--brand)] border border-[color-mix(in_srgb,var(--brand)_30%,transparent)]'
+                : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]'
+            }`}
+            title={vimEnabled ? 'Disable Vim mode' : 'Enable Vim mode'}
+          >
+            VIM
+          </button>
+          {isMarkdown && (
             <MarkdownModeToggle mode={markdownMode} onModeChange={setMarkdownMode} />
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* ⌘K Inline Edit */}
@@ -392,6 +444,16 @@ export function CodeEditor() {
           monacoEditor
         )}
       </div>
+
+      {/* Vim status bar */}
+      {vimEnabled && (
+        <div className="flex items-center h-5 px-3 border-t border-[var(--border)] bg-[var(--bg-secondary)] shrink-0">
+          <div
+            ref={vimStatusRef}
+            className="text-[10px] font-mono text-[var(--brand)] [&>*]:!text-[10px] [&>*]:!font-mono"
+          />
+        </div>
+      )}
     </div>
   )
 }
