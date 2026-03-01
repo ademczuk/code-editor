@@ -1,0 +1,288 @@
+'use client'
+
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Icon } from '@iconify/react'
+import { isTauri, tauriInvoke, tauriListen } from '@/lib/tauri'
+
+interface TerminalTab {
+  id: number
+  label: string
+  alive: boolean
+}
+
+interface TerminalPanelProps {
+  visible: boolean
+  height: number
+  onHeightChange: (h: number) => void
+}
+
+export function TerminalPanel({ visible, height, onHeightChange }: TerminalPanelProps) {
+  const [tabs, setTabs] = useState<TerminalTab[]>([])
+  const [activeTab, setActiveTab] = useState<number | null>(null)
+  const termRef = useRef<HTMLDivElement>(null)
+  const xtermRef = useRef<any>(null)     // Terminal instance
+  const fitRef = useRef<any>(null)       // FitAddon instance
+  const resizing = useRef(false)
+  const startY = useRef(0)
+  const startH = useRef(0)
+
+  // Desktop check
+  const isDesktop = isTauri()
+
+  // Create a new terminal session
+  const createTerminal = useCallback(async () => {
+    if (!isDesktop) return
+
+    const id = await tauriInvoke<number>('create_terminal', {
+      cols: 80,
+      rows: 24,
+    })
+    if (id == null) return
+
+    const tab: TerminalTab = { id, label: `Terminal ${id}`, alive: true }
+    setTabs(prev => [...prev, tab])
+    setActiveTab(id)
+  }, [isDesktop])
+
+  // Initialize xterm.js (once)
+  useEffect(() => {
+    if (!visible || !termRef.current || xtermRef.current) return
+
+    let cancelled = false
+    ;(async () => {
+      const { Terminal } = await import('@xterm/xterm')
+      const { FitAddon } = await import('@xterm/addon-fit')
+
+      if (cancelled || !termRef.current) return
+
+      // Read CSS variables for theme
+      const s = getComputedStyle(document.documentElement)
+      const v = (name: string) => s.getPropertyValue(name).trim()
+
+      const term = new Terminal({
+        cursorBlink: true,
+        cursorStyle: 'bar',
+        fontSize: 13,
+        fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace",
+        lineHeight: 1.4,
+        scrollback: 10000,
+        allowProposedApi: true,
+        theme: {
+          background: v('--bg') || '#0a0a0a',
+          foreground: v('--text-primary') || '#e5e5e5',
+          cursor: v('--brand') || '#a855f7',
+          cursorAccent: v('--bg') || '#0a0a0a',
+          selectionBackground: v('--brand') + '40' || '#a855f740',
+          black: '#1e1e1e',
+          red: '#f87171',
+          green: '#4ade80',
+          yellow: '#facc15',
+          blue: '#60a5fa',
+          magenta: '#c084fc',
+          cyan: '#22d3ee',
+          white: '#e5e5e5',
+          brightBlack: '#525252',
+          brightRed: '#fca5a5',
+          brightGreen: '#86efac',
+          brightYellow: '#fde047',
+          brightBlue: '#93c5fd',
+          brightMagenta: '#d8b4fe',
+          brightCyan: '#67e8f9',
+          brightWhite: '#fafafa',
+        },
+      })
+
+      const fit = new FitAddon()
+      term.loadAddon(fit)
+
+      term.open(termRef.current!)
+      fit.fit()
+
+      xtermRef.current = term
+      fitRef.current = fit
+
+      // Handle user input → send to PTY
+      term.onData(async (data: string) => {
+        if (activeTabRef.current != null) {
+          await tauriInvoke('write_terminal', { id: activeTabRef.current, data })
+        }
+      })
+
+      // Auto-create first terminal
+      if (tabs.length === 0 && isDesktop) {
+        createTerminal()
+      }
+    })()
+
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible])
+
+  // Ref for activeTab (used inside xterm onData callback)
+  const activeTabRef = useRef(activeTab)
+  useEffect(() => { activeTabRef.current = activeTab }, [activeTab])
+
+  // Listen for PTY output from active tab
+  useEffect(() => {
+    if (activeTab == null || !xtermRef.current) return
+
+    let unlisten: (() => void) | null = null
+    let unlistenExit: (() => void) | null = null
+
+    ;(async () => {
+      unlisten = await tauriListen<{ data: string }>(`terminal-output-${activeTab}`, (payload) => {
+        xtermRef.current?.write(payload.data)
+      })
+      unlistenExit = await tauriListen<{ id: number }>(`terminal-exit-${activeTab}`, (payload) => {
+        setTabs(prev => prev.map(t => t.id === payload.id ? { ...t, alive: false } : t))
+        xtermRef.current?.write('\r\n\x1b[90m[Process exited]\x1b[0m\r\n')
+      })
+    })()
+
+    // Clear and focus terminal on tab switch
+    xtermRef.current.clear()
+    xtermRef.current.focus()
+
+    return () => {
+      unlisten?.()
+      unlistenExit?.()
+    }
+  }, [activeTab])
+
+  // Fit on resize
+  useEffect(() => {
+    if (!visible || !fitRef.current) return
+
+    const fit = () => {
+      fitRef.current?.fit()
+      // Notify PTY of new size
+      if (activeTab != null && xtermRef.current) {
+        const { cols, rows } = xtermRef.current
+        tauriInvoke('resize_terminal', { id: activeTab, cols, rows })
+      }
+    }
+
+    fit()
+    const obs = new ResizeObserver(fit)
+    if (termRef.current) obs.observe(termRef.current)
+    return () => obs.disconnect()
+  }, [visible, height, activeTab])
+
+  // Vertical resize handle
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    resizing.current = true
+    startY.current = e.clientY
+    startH.current = height
+
+    const onMove = (ev: MouseEvent) => {
+      if (!resizing.current) return
+      const delta = startY.current - ev.clientY
+      const newH = Math.max(120, Math.min(600, startH.current + delta))
+      onHeightChange(newH)
+    }
+    const onUp = () => {
+      resizing.current = false
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    document.body.style.cursor = 'row-resize'
+    document.body.style.userSelect = 'none'
+  }, [height, onHeightChange])
+
+  // Close a terminal tab
+  const closeTab = useCallback(async (id: number) => {
+    await tauriInvoke('kill_terminal', { id })
+    setTabs(prev => {
+      const next = prev.filter(t => t.id !== id)
+      if (activeTab === id) {
+        setActiveTab(next.length > 0 ? next[next.length - 1].id : null)
+      }
+      return next
+    })
+  }, [activeTab])
+
+  if (!visible) return null
+
+  return (
+    <div
+      className="flex flex-col border-t border-[var(--border)]"
+      style={{ height: `${height}px`, minHeight: 120 }}
+    >
+      {/* Resize handle */}
+      <div
+        onMouseDown={onMouseDown}
+        className="h-[3px] cursor-row-resize hover:bg-[var(--brand)] transition-colors shrink-0"
+      />
+
+      {/* Tab bar */}
+      <div className="flex items-center h-9 bg-[var(--bg-secondary)] border-b border-[var(--border)] px-2 gap-1 shrink-0">
+        <span className="text-[11px] font-medium text-[var(--text-secondary)] uppercase tracking-wider mr-2">
+          Terminal
+        </span>
+
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`
+              flex items-center gap-1.5 px-2.5 py-1 rounded text-[12px] transition-colors
+              ${activeTab === tab.id
+                ? 'bg-[var(--bg-tertiary)] text-[var(--text-primary)]'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }
+              ${!tab.alive ? 'opacity-50' : ''}
+            `}
+          >
+            <Icon icon="lucide:terminal" width={12} height={12} />
+            <span>{tab.label}</span>
+            <span
+              onClick={(e) => { e.stopPropagation(); closeTab(tab.id) }}
+              className="ml-1 hover:text-[var(--text-primary)] cursor-pointer"
+            >
+              <Icon icon="lucide:x" width={10} height={10} />
+            </span>
+          </button>
+        ))}
+
+        {/* New terminal button */}
+        {isDesktop && (
+          <button
+            onClick={createTerminal}
+            className="ml-1 p-1 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+            title="New Terminal"
+          >
+            <Icon icon="lucide:plus" width={14} height={14} />
+          </button>
+        )}
+
+        {/* Spacer + close */}
+        <div className="flex-1" />
+        <span className="text-[10px] text-[var(--text-tertiary)] font-mono">
+          {isDesktop ? 'PTY' : 'web'}
+        </span>
+      </div>
+
+      {/* Terminal viewport */}
+      <div className="flex-1 overflow-hidden bg-[var(--bg)]">
+        {isDesktop ? (
+          <div ref={termRef} className="w-full h-full p-2" />
+        ) : (
+          <div className="flex items-center justify-center h-full text-[var(--text-secondary)] text-sm">
+            <div className="text-center space-y-2">
+              <Icon icon="lucide:terminal" width={32} height={32} className="mx-auto opacity-40" />
+              <p>Terminal available in the desktop app</p>
+              <p className="text-[12px] text-[var(--text-tertiary)]">
+                Run <code className="px-1 py-0.5 bg-[var(--bg-secondary)] rounded text-[var(--brand)]">pnpm tauri:dev</code> for native terminal
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
