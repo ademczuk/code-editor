@@ -13,6 +13,7 @@ import { RepoSelector } from '@/components/repo-selector'
 import { ResizeHandle } from '@/components/resize-handle'
 import { ThemeSwitcher } from '@/components/theme-switcher'
 import { QuickOpen } from '@/components/quick-open'
+import { ShortcutsOverlay } from '@/components/shortcuts-overlay'
 
 const STORAGE_REMEMBER = 'code-editor:remember'
 
@@ -262,6 +263,7 @@ function EditorLayout() {
   const [agentOpen, setAgentOpen] = useState(false)
   const [explorerVisible, setExplorerVisible] = useState(true)
   const [quickOpenVisible, setQuickOpenVisible] = useState(false)
+  const [shortcutsVisible, setShortcutsVisible] = useState(false)
 
   const dirtyCount = files.filter(f => f.dirty).length
 
@@ -311,6 +313,11 @@ function EditorLayout() {
         if (e.key === 'b') { e.preventDefault(); setExplorerVisible(v => !v) }
         if (e.key === 'j') { e.preventDefault(); setAgentOpen(v => !v) }
         if (e.key === 'p') { e.preventDefault(); setQuickOpenVisible(v => !v) }
+      }
+      // ? key (not in input)
+      if (e.key === '?' && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault()
+        setShortcutsVisible(v => !v)
       }
     }
     window.addEventListener('keydown', handler)
@@ -418,6 +425,12 @@ function EditorLayout() {
           const event = new CustomEvent('file-select', { detail: { path, sha } })
           window.dispatchEvent(event)
         }}
+      />
+
+      {/* Shortcuts Overlay (?) */}
+      <ShortcutsOverlay
+        open={shortcutsVisible}
+        onClose={() => setShortcutsVisible(false)}
       />
 
       {/* Status bar */}

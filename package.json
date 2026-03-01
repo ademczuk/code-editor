@@ -3,17 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "bdev": "next build --webpack && next dev",
     "dev": "next dev",
     "build": "next build --webpack",
+    "build:static": "next build --webpack",
     "start": "next start",
-    "lint": "next lint"
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
     "@iconify/react": "^6.0.2",
     "@monaco-editor/loader": "^1.7.0",
     "@monaco-editor/react": "^4.7.0",
     "@tailwindcss/postcss": "^4.2.1",
+    "@tauri-apps/api": "^2.10.1",
     "@types/dompurify": "^3.2.0",
     "@types/node": "^25.3.3",
     "@types/react": "^19.2.14",
@@ -30,6 +33,7 @@
     "typescript": "^5.9.3"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.10.0",
     "monaco-editor": "^0.55.1"
   }
 }
