@@ -47,56 +47,82 @@ function buildXtermTheme() {
   }
 }
 
-export function TerminalPanel({ visible, height, onHeightChange }: TerminalPanelProps) {
-  const { version: themeVersion } = useTheme()
+// ─── Single Terminal Pane ──────────────────────────────────────────────────
+
+interface TerminalPaneProps {
+  visible: boolean
+  height: number
+  isDesktop: boolean
+  themeVersion: number
+  showSplitButton: boolean
+  onSplit: () => void
+  onClose?: () => void
+}
+
+function TerminalPane({
+  visible,
+  height,
+  isDesktop,
+  themeVersion,
+  showSplitButton,
+  onSplit,
+  onClose,
+}: TerminalPaneProps) {
   const [tabs, setTabs] = useState<TerminalTab[]>([])
   const [activeTab, setActiveTab] = useState<number | null>(null)
-  const [isDesktop, setIsDesktop] = useState(false)
   const [terminalError, setTerminalError] = useState<string | null>(null)
   const termRef = useRef<HTMLDivElement>(null)
-  const xtermRef = useRef<any>(null)     // Terminal instance
-  const fitRef = useRef<any>(null)       // FitAddon instance
-  const resizing = useRef(false)
-  const startY = useRef(0)
-  const startH = useRef(0)
+  const xtermRef = useRef<any>(null)
+  const fitRef = useRef<any>(null)
+  const activeTabRef = useRef<number | null>(null)
+  const tabsRef = useRef<TerminalTab[]>([])
 
-  // Detect Tauri on mount (client-side only)
-  useEffect(() => { setIsDesktop(isTauri()) }, [])
+  useEffect(() => { activeTabRef.current = activeTab }, [activeTab])
+  useEffect(() => { tabsRef.current = tabs }, [tabs])
 
-  // Create a new terminal session
-  const createTerminal = useCallback(async () => {
+  // Kill all PTY sessions and dispose xterm on unmount
+  useEffect(() => {
+    return () => {
+      for (const tab of tabsRef.current) {
+        tauriInvoke('kill_terminal', { id: tab.id }).catch(() => {})
+      }
+      if (xtermRef.current) {
+        xtermRef.current.dispose()
+        xtermRef.current = null
+      }
+    }
+  }, [])
+
+  const createTerminal = useCallback(async (label?: string, initialCommand?: string) => {
     if (!isDesktop) return
-
     try {
       setTerminalError(null)
-      const id = await tauriInvoke<number>('create_terminal', {
-        cols: 80,
-        rows: 24,
-      })
+      const id = await tauriInvoke<number>('create_terminal', { cols: 80, rows: 24 })
       if (id == null) {
         setTerminalError('Terminal is unavailable outside the desktop runtime.')
         return
       }
-
-      const tab: TerminalTab = { id, label: `Terminal ${id}`, alive: true }
+      const tab: TerminalTab = { id, label: label ?? `Terminal ${id}`, alive: true }
       setTabs(prev => [...prev, tab])
       setActiveTab(id)
+      if (initialCommand) {
+        setTimeout(async () => {
+          await tauriInvoke('write_terminal', { id, data: initialCommand + '\n' })
+        }, 600)
+      }
     } catch (err) {
       setTerminalError(err instanceof Error ? err.message : 'Failed to create terminal session')
     }
   }, [isDesktop])
 
-  // Initialize xterm.js (once)
+  // Initialize xterm (once per pane mount)
   useEffect(() => {
     if (!visible || !termRef.current || xtermRef.current) return
-
     let cancelled = false
     ;(async () => {
       const { Terminal } = await import('@xterm/xterm')
       const { FitAddon } = await import('@xterm/addon-fit')
-
       if (cancelled || !termRef.current) return
-
       const term = new Terminal({
         cursorBlink: true,
         cursorStyle: 'bar',
@@ -107,46 +133,33 @@ export function TerminalPanel({ visible, height, onHeightChange }: TerminalPanel
         allowProposedApi: true,
         theme: buildXtermTheme(),
       })
-
       const fit = new FitAddon()
       term.loadAddon(fit)
-
       term.open(termRef.current!)
       fit.fit()
-
       xtermRef.current = term
       fitRef.current = fit
-
-      // Handle user input → send to PTY
       term.onData(async (data: string) => {
         if (activeTabRef.current != null) {
           await tauriInvoke('write_terminal', { id: activeTabRef.current, data })
         }
       })
-
     })()
-
     return () => { cancelled = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible])
 
-  // Ensure first terminal exists when panel opens in desktop mode.
+  // Auto-create first terminal when pane becomes ready
   useEffect(() => {
     if (!visible || !isDesktop || tabs.length > 0) return
     void createTerminal()
   }, [visible, isDesktop, tabs.length, createTerminal])
 
-  // Ref for activeTab (used inside xterm onData callback)
-  const activeTabRef = useRef(activeTab)
-  useEffect(() => { activeTabRef.current = activeTab }, [activeTab])
-
-  // Listen for PTY output from active tab
+  // Subscribe to PTY output for the active tab
   useEffect(() => {
     if (activeTab == null || !xtermRef.current) return
-
     let unlisten: (() => void) | null = null
     let unlistenExit: (() => void) | null = null
-
     ;(async () => {
       unlisten = await tauriListen<{ data: string }>(`terminal-output-${activeTab}`, (payload) => {
         xtermRef.current?.write(payload.data)
@@ -156,100 +169,49 @@ export function TerminalPanel({ visible, height, onHeightChange }: TerminalPanel
         xtermRef.current?.write('\r\n\x1b[90m[Process exited]\x1b[0m\r\n')
       })
     })()
-
-    // Clear and focus terminal on tab switch
     xtermRef.current.clear()
     xtermRef.current.focus()
-
-    return () => {
-      unlisten?.()
-      unlistenExit?.()
-    }
+    return () => { unlisten?.(); unlistenExit?.() }
   }, [activeTab])
 
-  // Reapply xterm theme live when mode/theme changes
+  // Reapply xterm theme when mode/theme changes
   useEffect(() => {
     const term = xtermRef.current
     if (!term) return
-    const id = requestAnimationFrame(() => {
-      term.options.theme = buildXtermTheme()
-    })
+    const id = requestAnimationFrame(() => { term.options.theme = buildXtermTheme() })
     return () => cancelAnimationFrame(id)
   }, [themeVersion])
 
-  // Fit on resize
+  // Fit terminal on size or active tab change
   useEffect(() => {
     if (!visible || !fitRef.current) return
-
     const fit = () => {
       fitRef.current?.fit()
-      // Notify PTY of new size
       if (activeTab != null && xtermRef.current) {
         const { cols, rows } = xtermRef.current
         tauriInvoke('resize_terminal', { id: activeTab, cols, rows })
       }
     }
-
     fit()
     const obs = new ResizeObserver(fit)
     if (termRef.current) obs.observe(termRef.current)
     return () => obs.disconnect()
   }, [visible, height, activeTab])
 
-  // Vertical resize handle
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    resizing.current = true
-    startY.current = e.clientY
-    startH.current = height
-
-    const onMove = (ev: MouseEvent) => {
-      if (!resizing.current) return
-      const delta = startY.current - ev.clientY
-      const newH = Math.max(120, Math.min(600, startH.current + delta))
-      onHeightChange(newH)
-    }
-    const onUp = () => {
-      resizing.current = false
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-    document.body.style.cursor = 'row-resize'
-    document.body.style.userSelect = 'none'
-  }, [height, onHeightChange])
-
-  // Close a terminal tab
   const closeTab = useCallback(async (id: number) => {
     await tauriInvoke('kill_terminal', { id })
     setTabs(prev => {
       const next = prev.filter(t => t.id !== id)
-      if (activeTab === id) {
-        setActiveTab(next.length > 0 ? next[next.length - 1].id : null)
-      }
+      if (activeTab === id) setActiveTab(next.length > 0 ? next[next.length - 1].id : null)
       return next
     })
   }, [activeTab])
 
-  if (!visible) return null
-
   return (
-    <div
-      className="flex flex-col border-t border-[var(--border)]"
-      style={{ height: `${height}px`, minHeight: 120 }}
-    >
-      {/* Resize handle */}
-      <div
-        onMouseDown={onMouseDown}
-        className="h-[3px] cursor-row-resize hover:bg-[var(--brand)] transition-colors shrink-0"
-      />
-
+    <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
       {/* Tab bar */}
-      <div className="flex items-center h-9 bg-[var(--bg-secondary)] border-b border-[var(--border)] px-2 gap-1 shrink-0">
-        <span className="text-[11px] font-medium text-[var(--text-secondary)] uppercase tracking-wider mr-2">
+      <div className="flex items-center h-9 bg-[var(--bg-secondary)] border-b border-[var(--border)] px-2 gap-1 shrink-0 overflow-x-auto">
+        <span className="text-[11px] font-medium text-[var(--text-secondary)] uppercase tracking-wider mr-2 shrink-0">
           Terminal
         </span>
 
@@ -258,7 +220,7 @@ export function TerminalPanel({ visible, height, onHeightChange }: TerminalPanel
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`
-              flex items-center gap-1.5 px-2.5 py-1 rounded text-[12px] transition-colors
+              flex items-center gap-1.5 px-2.5 py-1 rounded text-[12px] transition-colors shrink-0
               ${activeTab === tab.id
                 ? 'bg-[var(--bg-tertiary)] text-[var(--text-primary)]'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -266,7 +228,12 @@ export function TerminalPanel({ visible, height, onHeightChange }: TerminalPanel
               ${!tab.alive ? 'opacity-50' : ''}
             `}
           >
-            <Icon icon="lucide:terminal" width={12} height={12} />
+            <Icon
+              icon={tab.label === 'Gateway Engine' ? 'lucide:cpu' : 'lucide:terminal'}
+              width={12}
+              height={12}
+              className={tab.label === 'Gateway Engine' ? 'text-[var(--brand)]' : ''}
+            />
             <span>{tab.label}</span>
             <span
               onClick={(e) => { e.stopPropagation(); closeTab(tab.id) }}
@@ -277,20 +244,48 @@ export function TerminalPanel({ visible, height, onHeightChange }: TerminalPanel
           </button>
         ))}
 
-        {/* New terminal button */}
         {isDesktop && (
+          <>
+            <button
+              onClick={() => createTerminal()}
+              className="ml-1 p-1 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
+              title="New Terminal"
+            >
+              <Icon icon="lucide:plus" width={14} height={14} />
+            </button>
+            <button
+              onClick={() => createTerminal('Gateway Engine', 'openclaw gateway logs')}
+              className="p-1 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--brand)] transition-colors shrink-0"
+              title="Open Gateway Engine logs"
+            >
+              <Icon icon="lucide:cpu" width={13} height={13} />
+            </button>
+          </>
+        )}
+
+        <div className="flex-1" />
+
+        {showSplitButton && (
           <button
-            onClick={createTerminal}
-            className="ml-1 p-1 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-            title="New Terminal"
+            onClick={onSplit}
+            className="p-1 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
+            title="Split terminal"
           >
-            <Icon icon="lucide:plus" width={14} height={14} />
+            <Icon icon="lucide:panel-right" width={13} height={13} />
           </button>
         )}
 
-        {/* Spacer + close */}
-        <div className="flex-1" />
-        <span className="text-[10px] text-[var(--text-tertiary)] font-mono">
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="p-1 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
+            title="Close pane"
+          >
+            <Icon icon="lucide:x" width={12} height={12} />
+          </button>
+        )}
+
+        <span className="text-[10px] text-[var(--text-tertiary)] font-mono ml-1 shrink-0">
           {isDesktop ? 'PTY' : 'web'}
         </span>
       </div>
@@ -316,6 +311,85 @@ export function TerminalPanel({ visible, height, onHeightChange }: TerminalPanel
               </p>
             </div>
           </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Terminal Panel (host for 1 or 2 panes) ───────────────────────────────
+
+export function TerminalPanel({ visible, height, onHeightChange }: TerminalPanelProps) {
+  const { version: themeVersion } = useTheme()
+  const [splitEnabled, setSplitEnabled] = useState(false)
+  const [isDesktop, setIsDesktop] = useState(false)
+  const resizing = useRef(false)
+  const startY = useRef(0)
+  const startH = useRef(0)
+
+  useEffect(() => { setIsDesktop(isTauri()) }, [])
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    resizing.current = true
+    startY.current = e.clientY
+    startH.current = height
+    const onMove = (ev: MouseEvent) => {
+      if (!resizing.current) return
+      const delta = startY.current - ev.clientY
+      const newH = Math.max(120, Math.min(600, startH.current + delta))
+      onHeightChange(newH)
+    }
+    const onUp = () => {
+      resizing.current = false
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    document.body.style.cursor = 'row-resize'
+    document.body.style.userSelect = 'none'
+  }, [height, onHeightChange])
+
+  if (!visible) return null
+
+  return (
+    <div
+      className="flex flex-col border-t border-[var(--border)]"
+      style={{ height: `${height}px`, minHeight: 120 }}
+    >
+      {/* Resize handle */}
+      <div
+        onMouseDown={onMouseDown}
+        className="h-[3px] cursor-row-resize hover:bg-[var(--brand)] transition-colors shrink-0"
+      />
+
+      {/* Pane area */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        <TerminalPane
+          visible={visible}
+          height={height}
+          isDesktop={isDesktop}
+          themeVersion={themeVersion}
+          showSplitButton={!splitEnabled}
+          onSplit={() => setSplitEnabled(true)}
+        />
+
+        {splitEnabled && (
+          <>
+            <div className="w-px bg-[var(--border)] shrink-0" />
+            <TerminalPane
+              visible={visible}
+              height={height}
+              isDesktop={isDesktop}
+              themeVersion={themeVersion}
+              showSplitButton={false}
+              onSplit={() => {}}
+              onClose={() => setSplitEnabled(false)}
+            />
+          </>
         )}
       </div>
     </div>
