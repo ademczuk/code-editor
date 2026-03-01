@@ -146,6 +146,8 @@ export function AgentPanel() {
   const local = useLocal()
 
   const [chatId, setChatId] = useState(() => crypto.randomUUID())
+  // Each chat gets its own gateway session for isolation
+  const sessionKey = `${CODE_EDITOR_SESSION_KEY}:${chatId.slice(0, 8)}`
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
       const saved = localStorage.getItem('code-editor:chat:' + chatId)
@@ -212,7 +214,7 @@ export function AgentPanel() {
     ;(async () => {
       try {
         // Get current session status for model info
-        const status = (await sendRequest('sessions.status', { sessionKey: CODE_EDITOR_SESSION_KEY })) as Record<string, unknown> | undefined
+        const status = (await sendRequest('sessions.status', { sessionKey })) as Record<string, unknown> | undefined
         const model = (status?.model as string) || (status?.defaultModel as string) || ''
         
         // Get available models/agents
@@ -238,7 +240,7 @@ export function AgentPanel() {
   useEffect(() => {
     if (!isConnected || sessionInitRef.current) return
 
-    const initKey = `${SESSION_INIT_STORAGE_KEY}:${CODE_EDITOR_SESSION_KEY}:v${CODE_EDITOR_SYSTEM_PROMPT_VERSION}`
+    const initKey = `${SESSION_INIT_STORAGE_KEY}:${sessionKey}:v${CODE_EDITOR_SYSTEM_PROMPT_VERSION}`
     const alreadyInit = typeof window !== 'undefined' && sessionStorage.getItem(initKey)
     if (alreadyInit) {
       sessionInitRef.current = true
@@ -247,7 +249,7 @@ export function AgentPanel() {
 
     // Inject system prompt
     sendRequest('chat.inject', {
-      sessionKey: CODE_EDITOR_SESSION_KEY,
+      sessionKey,
       message: CODE_EDITOR_SYSTEM_PROMPT,
       label: 'Knot Code system prompt',
     }).then(() => {
@@ -261,10 +263,10 @@ export function AgentPanel() {
 
     // Label the session
     sendRequest('sessions.patch', {
-      key: CODE_EDITOR_SESSION_KEY,
-      label: 'Knot Code Agent',
+      key: sessionKey,
+      label: `Knot Code — ${chatId.slice(0, 8)}`,
     }).catch(() => { /* non-fatal */ })
-  }, [isConnected, sendRequest])
+  }, [isConnected, sendRequest, sessionKey])
 
   // ─── Listen for chat events (streaming replies) ───────────────
   useEffect(() => {
@@ -279,7 +281,7 @@ export function AgentPanel() {
 
       // Match by idempotency key or session key fallback
       const matchesIdem = !!(idempotencyKey && sentKeysRef.current.has(idempotencyKey))
-      const matchesSession = !idempotencyKey && eventSessionKey === CODE_EDITOR_SESSION_KEY
+      const matchesSession = !idempotencyKey && eventSessionKey === sessionKey
       if (!matchesIdem && !matchesSession) return
 
       // Track tool_use events for thinking trail
@@ -620,6 +622,11 @@ export function AgentPanel() {
           setMessages(saved ? JSON.parse(saved) : [])
         } catch { setMessages([]) }
         setStreamBuffer('')
+        // Reset init flag so system prompt gets injected for new session
+        sessionInitRef.current = false
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem(`${SESSION_INIT_STORAGE_KEY}:${CODE_EDITOR_SESSION_KEY}:${newId.slice(0, 8)}:v${CODE_EDITOR_SYSTEM_PROMPT_VERSION}`)
+        }
       }
     }
     window.addEventListener('switch-chat', handler)

@@ -175,6 +175,25 @@ export async function fetchBranches(
   return all
 }
 
+// ─── Create branch ──────────────────────────────────────────────
+
+export async function createBranch(
+  repoFullName: string,
+  branchName: string,
+  fromSha: string,
+): Promise<boolean> {
+  const res = await ghFetch(`https://api.github.com/repos/${repoFullName}/git/refs`, {
+    method: 'POST',
+    body: JSON.stringify({ ref: `refs/heads/${branchName}`, sha: fromSha }),
+  })
+  return res.ok
+}
+
+export async function fetchBranchesByName(repoFullName: string): Promise<Branch[]> {
+  const [owner, repo] = repoFullName.split('/')
+  return fetchBranches(owner, repo)
+}
+
 // ─── Commit (single + multi-file) ─────────────────────────────
 
 export async function commitFiles(

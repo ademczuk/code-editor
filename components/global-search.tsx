@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Icon } from '@iconify/react'
 import { useEditor } from '@/context/editor-context'
+import { useRepo } from '@/context/repo-context'
+import { authHeaders } from '@/lib/github-api'
 
 interface SearchResult {
   path: string
@@ -20,6 +22,8 @@ interface Props {
 
 export function GlobalSearch({ open, onClose, onNavigate }: Props) {
   const { files } = useEditor()
+  const { repo } = useRepo()
+  const [searchScope, setSearchScope] = useState<'local' | 'repo'>('local')
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
@@ -39,44 +43,77 @@ export function GlobalSearch({ open, onClose, onNavigate }: Props) {
     }
   }, [open])
 
-  const searchFiles = useCallback(async (q: string) => {
-    if (!q || q.length < 2) { setResults([]); return }
-    setSearching(true)
-
+  const searchLocal = useCallback((q: string): SearchResult[] => {
     const matches: SearchResult[] = []
-
     let pattern: RegExp
     try {
       pattern = useRegex ? new RegExp(q, caseSensitive ? 'g' : 'gi') : new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), caseSensitive ? 'g' : 'gi')
-    } catch {
-      setSearching(false)
-      return
-    }
+    } catch { return [] }
 
-    // Search through all open/loaded files in editor context
     for (const file of files) {
       if (file.kind !== 'text') continue
       const lines = file.content.split('\n')
       for (let i = 0; i < lines.length; i++) {
         const match = pattern.exec(lines[i])
         if (match) {
-          matches.push({
-            path: file.path,
-            line: i + 1,
-            content: lines[i],
-            matchStart: match.index,
-            matchEnd: match.index + match[0].length,
-          })
+          matches.push({ path: file.path, line: i + 1, content: lines[i], matchStart: match.index, matchEnd: match.index + match[0].length })
           if (matches.length >= 100) break
         }
         pattern.lastIndex = 0
       }
       if (matches.length >= 100) break
     }
+    return matches
+  }, [files, caseSensitive, useRegex])
+
+  const searchRepo = useCallback(async (q: string): Promise<SearchResult[]> => {
+    if (!repo) return []
+    try {
+      const resp = await fetch(
+        `https://api.github.com/search/code?q=${encodeURIComponent(q)}+repo:${repo.fullName}&per_page=30`,
+        { headers: { ...authHeaders(), 'Accept': 'application/vnd.github.text-match+json' } }
+      )
+      if (!resp.ok) return []
+      const data = await resp.json()
+      const matches: SearchResult[] = []
+      for (const item of (data.items || [])) {
+        const fragments = item.text_matches || []
+        for (const frag of fragments) {
+          const lines = (frag.fragment || '').split('\n')
+          for (let i = 0; i < lines.length; i++) {
+            const idx = lines[i].toLowerCase().indexOf(q.toLowerCase())
+            if (idx >= 0) {
+              matches.push({ path: item.path, line: i + 1, content: lines[i], matchStart: idx, matchEnd: idx + q.length })
+              break
+            }
+          }
+        }
+        if (matches.length === 0 && item.path) {
+          matches.push({ path: item.path, line: 1, content: item.name || item.path, matchStart: 0, matchEnd: 0 })
+        }
+      }
+      return matches
+    } catch { return [] }
+  }, [repo])
+
+  const searchFiles = useCallback(async (q: string) => {
+    if (!q || q.length < 2) { setResults([]); return }
+    setSearching(true)
+
+    let matches: SearchResult[]
+    if (searchScope === 'local') {
+      matches = searchLocal(q)
+      // If no local results and repo connected, auto-fallback to repo search
+      if (matches.length === 0 && repo) {
+        matches = await searchRepo(q)
+      }
+    } else {
+      matches = await searchRepo(q)
+    }
 
     setResults(matches)
     setSearching(false)
-  }, [files, caseSensitive, useRegex])
+  }, [searchLocal, searchRepo, searchScope, repo])
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)

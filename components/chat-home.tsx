@@ -66,7 +66,7 @@ export function ChatHome({ onSend, onSelectFolder, onCloneRepo }: Props) {
             }}
             placeholder="Plan, @ for context, / for commands..."
             rows={3}
-            className="w-full resize-none rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] px-4 py-3 pr-12 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] outline-none focus:border-[color-mix(in_srgb,var(--brand)_50%,var(--border))] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--brand)_8%,transparent)] transition-all"
+            className="w-full resize-none rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] px-4 py-3 pr-12 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] outline-none focus:border-[color-mix(in_srgb,var(--brand)_50%,var(--border))] ring-0 focus:ring-[3px] focus:ring-[color-mix(in_srgb,var(--brand)_8%,transparent)] transition-all"
           />
           <button
             onClick={handleSubmit}
