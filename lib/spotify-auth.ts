@@ -1,3 +1,5 @@
+import { isTauri } from '@/lib/tauri'
+
 const SPOTIFY_CLIENT_ID = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID ?? ''
 const SCOPES = 'streaming user-read-playback-state user-modify-playback-state user-read-currently-playing'
 const TOKEN_KEY = 'knot:spotify-token'
@@ -66,10 +68,17 @@ function getRedirectUri(): string {
 }
 
 /**
- * Start Spotify PKCE login via popup window.
- * Returns a promise that resolves with the access token on success.
+ * Start Spotify PKCE login.
+ *
+ * In Tauri: opens the system browser for login. Spotify redirects back to
+ * http://localhost:3000/?code=..., which the dev server serves. That browser
+ * tab exchanges the code (same localStorage), and we detect the token via
+ * a storage event listener. The Tauri webview stays on the editor.
+ *
+ * In browser: navigates the current window to Spotify. On return,
+ * handleSpotifyCallback() picks up the code.
  */
-export async function startSpotifyLogin(): Promise<string> {
+export async function startSpotifyLogin(): Promise<void> {
   if (!SPOTIFY_CLIENT_ID) throw new Error('Spotify Client ID not configured')
 
   const verifier = generateCodeVerifier()
@@ -83,68 +92,65 @@ export async function startSpotifyLogin(): Promise<string> {
     scope: SCOPES,
     code_challenge_method: 'S256',
     code_challenge: challenge,
-    show_dialog: 'false',
   })
 
   const authUrl = `https://accounts.spotify.com/authorize?${params}`
 
-  return new Promise<string>((resolve, reject) => {
-    const width = 500
-    const height = 700
-    const left = window.screenX + (window.outerWidth - width) / 2
-    const top = window.screenY + (window.outerHeight - height) / 2
-    const popup = window.open(authUrl, 'spotify-auth', `width=${width},height=${height},left=${left},top=${top}`)
-
-    if (!popup) {
-      reject(new Error('Popup blocked — please allow popups for this site'))
-      return
+  if (isTauri()) {
+    try {
+      const { open } = await import('@tauri-apps/plugin-shell')
+      await open(authUrl)
+    } catch {
+      window.open(authUrl, '_blank', 'noopener,noreferrer')
     }
-
-    const interval = setInterval(() => {
-      try {
-        if (popup.closed) {
-          clearInterval(interval)
-          reject(new Error('Login cancelled'))
-          return
-        }
-
-        const url = popup.location.href
-        if (!url.startsWith(getRedirectUri())) return
-
-        const params = new URL(url).searchParams
-        const code = params.get('code')
-        const error = params.get('error')
-
-        clearInterval(interval)
-        popup.close()
-
-        if (error) {
-          reject(new Error(error === 'access_denied' ? 'Access denied' : error))
-          return
-        }
-
-        if (code) {
-          exchangeCode(code).then(resolve).catch(reject)
-        } else {
-          reject(new Error('No authorization code received'))
-        }
-      } catch {
-        // Cross-origin — popup hasn't redirected back yet
-      }
-    }, 200)
-
-    setTimeout(() => {
-      clearInterval(interval)
-      try { popup.close() } catch {}
-      reject(new Error('Login timed out'))
-    }, 300_000)
-  })
+  } else {
+    window.location.href = authUrl
+  }
 }
 
-async function exchangeCode(code: string): Promise<string> {
+/**
+ * Check if the current URL contains a Spotify OAuth callback code.
+ * If so, exchange it for tokens, clean up the URL, and show a success message
+ * (when running in the browser tab that Spotify redirected to).
+ */
+export async function handleSpotifyCallback(): Promise<boolean> {
+  const params = new URLSearchParams(window.location.search)
+  const code = params.get('code')
+  const error = params.get('error')
   const verifier = localStorage.getItem(VERIFIER_KEY)
-  if (!verifier) throw new Error('Missing PKCE verifier')
 
+  if (!code && !error) return false
+  if (!verifier) {
+    cleanUrl()
+    return false
+  }
+
+  if (error) {
+    cleanUrl()
+    localStorage.removeItem(VERIFIER_KEY)
+    throw new Error(error === 'access_denied' ? 'Spotify access denied' : error)
+  }
+
+  try {
+    await exchangeCode(code!, verifier)
+    cleanUrl()
+    return true
+  } catch (err) {
+    cleanUrl()
+    localStorage.removeItem(VERIFIER_KEY)
+    throw err
+  }
+}
+
+function cleanUrl() {
+  const url = new URL(window.location.href)
+  url.searchParams.delete('code')
+  url.searchParams.delete('state')
+  url.searchParams.delete('error')
+  window.history.replaceState({}, '', url.pathname + (url.searchParams.toString() ? `?${url.searchParams}` : ''))
+}
+
+async function exchangeCode(code: string, verifier: string): Promise<string> {
   const res = await fetch('https://accounts.spotify.com/api/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -196,18 +202,12 @@ export async function refreshSpotifyToken(): Promise<string | null> {
   }
 }
 
-/**
- * Get a valid token, refreshing if necessary.
- */
 export async function ensureSpotifyToken(): Promise<string | null> {
   const token = getSpotifyToken()
   if (token) return token
   return refreshSpotifyToken()
 }
 
-/**
- * Make an authenticated Spotify API request, auto-refreshing if needed.
- */
 export async function spotifyFetch(path: string, opts: RequestInit = {}): Promise<Response> {
   let token = await ensureSpotifyToken()
   if (!token) throw new Error('Not authenticated with Spotify')

@@ -9,6 +9,7 @@ import {
   spotifyFetch,
   startSpotifyLogin,
   clearSpotifyAuth,
+  handleSpotifyCallback,
 } from '@/lib/spotify-auth'
 
 declare global {
@@ -107,12 +108,30 @@ export function SpotifyPlayer() {
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Check auth state
+  // Handle OAuth callback on page load + check auth state
   useEffect(() => {
-    setAuthenticated(isSpotifyAuthenticated())
+    handleSpotifyCallback()
+      .then(didAuth => { if (didAuth) setCollapsed(false) })
+      .catch(err => setError(err instanceof Error ? err.message : 'Auth failed'))
+      .finally(() => setAuthenticated(isSpotifyAuthenticated()))
+
     const handler = () => setAuthenticated(isSpotifyAuthenticated())
     window.addEventListener('spotify-auth-changed', handler)
-    return () => window.removeEventListener('spotify-auth-changed', handler)
+
+    // In Tauri, the login happens in the system browser which shares localStorage
+    // via the same http://localhost:3000 origin. Detect cross-tab token writes.
+    const storageHandler = (e: StorageEvent) => {
+      if (e.key === 'knot:spotify-token' && e.newValue) {
+        setAuthenticated(true)
+        setCollapsed(false)
+      }
+    }
+    window.addEventListener('storage', storageHandler)
+
+    return () => {
+      window.removeEventListener('spotify-auth-changed', handler)
+      window.removeEventListener('storage', storageHandler)
+    }
   }, [])
 
   // Load Spotify SDK script
@@ -216,9 +235,9 @@ export function SpotifyPlayer() {
     setError(null)
     try {
       await startSpotifyLogin()
+      // Page will redirect — loggingIn state won't matter after navigation
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
-    } finally {
       setLoggingIn(false)
     }
   }, [])
