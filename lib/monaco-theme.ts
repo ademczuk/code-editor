@@ -11,6 +11,29 @@ function getCSSVar(name: string, fallback: string): string {
   return value || fallback
 }
 
+function toMonacoTokenHex(color: string, fallback: string): string {
+  const normalized = color.trim()
+  const fallbackNormalized = fallback.replace('#', '')
+  if (!normalized) return fallbackNormalized
+
+  const hex = normalized.replace('#', '')
+  if (/^[0-9a-fA-F]{6}$/.test(hex) || /^[0-9a-fA-F]{8}$/.test(hex)) return hex
+  if (/^[0-9a-fA-F]{3}$/.test(hex)) {
+    return hex
+      .split('')
+      .map((c) => c + c)
+      .join('')
+  }
+  if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+    return hex
+      .split('')
+      .map((c) => c + c)
+      .join('')
+  }
+
+  return fallbackNormalized
+}
+
 export function registerEditorTheme(monaco: { editor: typeof editor }) {
   const bg = getCSSVar('--bg', '#0a0a0a')
   const bgSubtle = getCSSVar('--bg-subtle', '#141414')
@@ -27,7 +50,7 @@ export function registerEditorTheme(monaco: { editor: typeof editor }) {
     base: 'vs-dark',
     inherit: true,
     rules: [
-      { token: 'comment', foreground: fgTertiary.replace('#', ''), fontStyle: 'italic' },
+      { token: 'comment', foreground: toMonacoTokenHex(fgTertiary, '666666'), fontStyle: 'italic' },
       { token: 'keyword', foreground: 'c084fc' },           // purple-400
       { token: 'keyword.control', foreground: 'c084fc' },
       { token: 'storage', foreground: 'c084fc' },
@@ -41,14 +64,14 @@ export function registerEditorTheme(monaco: { editor: typeof editor }) {
       { token: 'interface', foreground: '67e8f9' },
       { token: 'function', foreground: '93c5fd' },           // blue-300
       { token: 'function.call', foreground: '93c5fd' },
-      { token: 'variable', foreground: fg.replace('#', '') },
+      { token: 'variable', foreground: toMonacoTokenHex(fg, 'e5e5e5') },
       { token: 'variable.predefined', foreground: 'fca5a5' },// red-300
       { token: 'constant', foreground: 'fbbf24' },
       { token: 'tag', foreground: 'f87171' },                // red-400 (HTML/JSX)
       { token: 'attribute.name', foreground: 'c084fc' },
       { token: 'attribute.value', foreground: '86efac' },
-      { token: 'delimiter', foreground: fgSecondary.replace('#', '') },
-      { token: 'operator', foreground: fgSecondary.replace('#', '') },
+      { token: 'delimiter', foreground: toMonacoTokenHex(fgSecondary, '999999') },
+      { token: 'operator', foreground: toMonacoTokenHex(fgSecondary, '999999') },
     ],
     colors: {
       'editor.background': bg,
