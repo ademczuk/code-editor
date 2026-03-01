@@ -143,7 +143,13 @@ export function AgentPanel() {
   const { repo, tree: repoTree } = useRepo()
   const local = useLocal()
 
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [chatId, setChatId] = useState(() => crypto.randomUUID())
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem('code-editor:chat:' + chatId)
+      return saved ? JSON.parse(saved) : []
+    } catch { return [] }
+  })
   const [input, setInput] = useState('')
   const [contextAttachments, setContextAttachments] = useState<Array<{ type: 'file' | 'selection'; path: string; content: string; startLine?: number; endLine?: number }>>([])
   const [atMenuOpen, setAtMenuOpen] = useState(false)
@@ -591,9 +597,50 @@ export function AgentPanel() {
     }))
   }, [agentMode])
 
+  // Persist messages to localStorage
+  useEffect(() => {
+    if (messages.length > 0) {
+      try { localStorage.setItem('code-editor:chat:' + chatId, JSON.stringify(messages.slice(-50))) } catch {}
+    }
+  }, [messages, chatId])
+
+  // Listen for chat switch from workspace sidebar
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const newId = (e as CustomEvent).detail?.id
+      if (newId && newId !== chatId) {
+        // Save current messages
+        try { localStorage.setItem('code-editor:chat:' + chatId, JSON.stringify(messages.slice(-50))) } catch {}
+        // Load new chat
+        setChatId(newId)
+        try {
+          const saved = localStorage.getItem('code-editor:chat:' + newId)
+          setMessages(saved ? JSON.parse(saved) : [])
+        } catch { setMessages([]) }
+        setStreamBuffer('')
+      }
+    }
+    window.addEventListener('switch-chat', handler)
+    return () => window.removeEventListener('switch-chat', handler)
+  }, [chatId, messages])
+
   const appendMessage = useCallback((msg: ChatMessage) => {
     setMessages(prev => [...prev, msg])
   }, [])
+
+  // ─── Commit result listener ──────────────────────────────────
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { success: boolean; fileCount?: number; error?: string }
+      if (detail.success) {
+        appendMessage({ id: crypto.randomUUID(), role: 'system', content: `Committed ${detail.fileCount} file(s) successfully.`, timestamp: Date.now() })
+      } else {
+        appendMessage({ id: crypto.randomUUID(), role: 'system', content: `Commit failed: ${detail.error}`, timestamp: Date.now() })
+      }
+    }
+    window.addEventListener('agent-commit-result', handler)
+    return () => window.removeEventListener('agent-commit-result', handler)
+  }, [appendMessage])
 
   // ─── Send message ─────────────────────────────────────────────
   const sendMessage = useCallback(async () => {
@@ -601,6 +648,37 @@ export function AgentPanel() {
     if (!text || sending) return
 
     setInput('')
+
+    // ─── Slash command interception ───────────────────────────
+    if (text.startsWith('/commit')) {
+      const commitMsg = text.replace(/^\/commit\s*/, '').trim()
+      if (!commitMsg) {
+        appendMessage({ id: crypto.randomUUID(), role: 'system', content: 'Usage: /commit <message>', timestamp: Date.now() })
+        return
+      }
+      appendMessage({ id: crypto.randomUUID(), role: 'user', content: text, timestamp: Date.now() })
+      // Dispatch commit event — page.tsx handles the actual commit
+      window.dispatchEvent(new CustomEvent('agent-commit', { detail: { message: commitMsg } }))
+      appendMessage({ id: crypto.randomUUID(), role: 'system', content: 'Committing...', timestamp: Date.now() })
+      return
+    }
+    if (text === '/diff') {
+      appendMessage({ id: crypto.randomUUID(), role: 'user', content: text, timestamp: Date.now() })
+      const changes = diffEngine.getChanges()
+      if (changes.length > 0) {
+        const summary = diffEngine.getSummary()
+        appendMessage({ id: crypto.randomUUID(), role: 'system', content: `${summary.fileCount} file(s) changed: +${summary.additions} -${summary.deletions}\nFiles: ${changes.map(c => c.path).join(', ')}`, timestamp: Date.now() })
+      } else {
+        const dirtyFiles = files.filter(f => f.dirty)
+        if (dirtyFiles.length > 0) {
+          appendMessage({ id: crypto.randomUUID(), role: 'system', content: `${dirtyFiles.length} unsaved file(s): ${dirtyFiles.map(f => f.path).join(', ')}`, timestamp: Date.now() })
+        } else {
+          appendMessage({ id: crypto.randomUUID(), role: 'system', content: 'No changes detected.', timestamp: Date.now() })
+        }
+      }
+      return
+    }
+
     setSending(true)
 
     // Build visual label for attachments

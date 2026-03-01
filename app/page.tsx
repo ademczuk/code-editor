@@ -19,11 +19,13 @@ import { ModeSelector } from '@/components/mode-selector'
 import type { AgentMode } from '@/components/mode-selector'
 const DiffReviewPanel = dynamic(() => import('@/components/diff-review-panel').then(m => m.DiffReviewPanel), { ssr: false })
 import { ChangeSummaryBar } from '@/components/change-summary-bar'
+import { diffEngine } from '@/lib/streaming-diff'
 import { ResizeHandle } from '@/components/resize-handle'
 import { ThemeSwitcher } from '@/components/theme-switcher'
 const QuickOpen = dynamic(() => import('@/components/quick-open').then(m => m.QuickOpen), { ssr: false })
 const ShortcutsOverlay = dynamic(() => import('@/components/shortcuts-overlay').then(m => m.ShortcutsOverlay), { ssr: false })
 import type { CommandId } from '@/components/command-palette'
+import { GlobalSearch } from '@/components/global-search'
 const CommandPalette = dynamic(() => import('@/components/command-palette').then(m => m.CommandPalette), { ssr: false })
 import { fetchFileContentsByName as fetchFileContents, createOrUpdateFileByName as createOrUpdateFile, commitFilesByName as commitFiles } from '@/lib/github-api'
 const TerminalPanel = dynamic(() => import('@/components/terminal-panel').then(m => m.TerminalPanel), { ssr: false })
@@ -107,6 +109,7 @@ function EditorLayout() {
   const [shortcutsVisible, setShortcutsVisible] = useState(false)
   const [commandPaletteVisible, setCommandPaletteVisible] = useState(false)
   const [changesVisible, setChangesVisible] = useState(false)
+  const [globalSearchVisible, setGlobalSearchVisible] = useState(false)
   const [terminalVisible, setTerminalVisible] = useState(false)
   const [terminalHeight, setTerminalHeight] = useState(260)
   const [engineVisible, setEngineVisible] = useState(false)
@@ -353,7 +356,7 @@ function EditorLayout() {
     else if (id === 'terminal') setTerminalVisible(v => !v)
     else if (id === 'engine') setEngineVisible(v => !v)
     else if (id === 'changes') setChangesVisible(v => !v)
-    else if (id === 'search') setQuickOpenVisible(true)
+    else if (id === 'search') setGlobalSearchVisible(true)
   }, [])
 
   const handleRunCommand = useCallback((commandId: CommandId) => {
@@ -393,9 +396,14 @@ function EditorLayout() {
         {/* Workspace Sidebar — chat history (1Code-style) */}
         <WorkspaceSidebar
           activeId={activeChatId}
-          onSelect={setActiveChatId}
+          onSelect={(id) => {
+            setActiveChatId(id)
+            window.dispatchEvent(new CustomEvent('switch-chat', { detail: { id } }))
+          }}
           onNew={() => {
-            setActiveChatId(crypto.randomUUID())
+            const newId = crypto.randomUUID()
+            setActiveChatId(newId)
+            window.dispatchEvent(new CustomEvent('switch-chat', { detail: { id: newId } }))
             setAgentOpen(true)
           }}
           collapsed={sidebarCollapsed}
@@ -548,6 +556,18 @@ function EditorLayout() {
         onSelect={(path, sha) => {
           const event = new CustomEvent('file-select', { detail: { path, sha } })
           window.dispatchEvent(event)
+        }}
+      />
+
+      {/* Global Search (⌘⇧F) */}
+      <GlobalSearch
+        open={globalSearchVisible}
+        onClose={() => setGlobalSearchVisible(false)}
+        onNavigate={(path, line) => {
+          window.dispatchEvent(new CustomEvent('file-select', { detail: { path, sha: '' } }))
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('navigate-to-line', { detail: { line } }))
+          }, 200)
         }}
       />
 
