@@ -221,7 +221,7 @@ export function WorkspaceSidebar({ activeId, onSelect, onNew, onDelete, collapse
       {/* Branding + Header */}
       <div className={`shrink-0 ${isTauriDesktop ? 'pt-7' : ''}`}>
         <div data-tauri-drag-region className="flex items-center gap-2.5 px-3.5 pt-3 pb-1.5 tauri-drag-region">
-          <KnotLogo size={22} />
+          <KnotLogo size={22} className="animate-sidebar-logo" />
           <div className="flex-1 min-w-0">
             <div className="text-[13px] font-bold text-[var(--text-primary)] leading-tight">Knot Code</div>
             {repoName && (
@@ -235,14 +235,14 @@ export function WorkspaceSidebar({ activeId, onSelect, onNew, onDelete, collapse
 
         {/* New Chat + Search row */}
         <div className="flex items-center gap-2 px-3 pt-1.5 pb-2.5">
-          <div className="relative flex-1">
-            <Icon icon="lucide:search" width={13} height={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-disabled)]" />
+          <div className="relative flex-1 shine-on-load rounded-md">
+            <Icon icon="lucide:search" width={13} height={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-disabled)] z-[3]" />
             <input
               type="text"
               value={searchChat}
               onChange={e => setSearchChat(e.target.value)}
               placeholder="Search chats..."
-              className="w-full pl-8 pr-2.5 py-1.5 text-[12px] rounded-md bg-[var(--bg)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] outline-none focus:border-[color-mix(in_srgb,var(--brand)_50%,var(--border))] transition-colors"
+              className="w-full pl-8 pr-2.5 py-1.5 text-[12px] rounded-md bg-[var(--bg)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] outline-none focus:border-[color-mix(in_srgb,var(--brand)_50%,var(--border))] transition-colors relative z-[1]"
             />
           </div>
           <button onClick={onNew} className="p-2 rounded-md bg-[var(--brand)] text-[var(--brand-contrast)] hover:opacity-90 transition-opacity cursor-pointer shadow-sm" title="New Chat">
@@ -324,7 +324,7 @@ export function WorkspaceSidebar({ activeId, onSelect, onNew, onDelete, collapse
             className="w-[30px] h-[30px] flex items-center justify-center rounded-[var(--radius-sm)] hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] transition-colors cursor-pointer"
             title="Settings"
           >
-            <Icon icon="lucide:settings" width={15} height={15} />
+            <Icon icon="lucide:settings" width={15} height={15} className="animate-gear-sway" />
           </button>
         </div>
       </div>

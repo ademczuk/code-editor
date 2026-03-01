@@ -343,7 +343,7 @@ export default function EditorLayout() {
 
           {/* Settings */}
           <button onClick={() => setSettingsVisible(true)} className="p-1.5 rounded hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] cursor-pointer transition-colors" title="Settings">
-            <Icon icon="lucide:settings" width={16} height={16} />
+            <Icon icon="lucide:settings" width={16} height={16} className="animate-gear-sway" />
           </button>
         </div>
 
@@ -411,7 +411,7 @@ export default function EditorLayout() {
             <span
               className={`w-2 h-2 rounded-full transition-all duration-300 ${
                 status === 'connected'
-                  ? `bg-[var(--color-additions)] ${connectionAnim === 'pop' ? 'animate-badge-pop animate-glow-pulse' : ''}`
+                  ? `bg-[var(--color-additions)] ${connectionAnim === 'pop' ? 'animate-badge-pop animate-glow-pulse' : 'animate-orbit-dot'}`
                   : status === 'connecting' || status === 'authenticating'
                     ? 'bg-[var(--warning,#eab308)] animate-pulse'
                     : 'bg-[var(--text-disabled)] scale-75 opacity-60'

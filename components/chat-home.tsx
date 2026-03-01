@@ -115,7 +115,7 @@ export function ChatHome({ onSend, onSelectFolder, onCloneRepo }: Props) {
     <div className="flex-1 flex flex-col items-center justify-center px-6 overflow-y-auto">
       <div className="w-full max-w-[580px] py-6">
         <div className="flex justify-center mb-4">
-          <KnotLogo size={40} />
+          <KnotLogo size={40} className="animate-knot-idle" />
         </div>
         <h1 className="text-center text-[22px] font-semibold text-[var(--text-primary)] tracking-tight mb-4">
           {repoShort ? `What should we work on?` : `What do you want to build?`}
@@ -189,11 +189,11 @@ export function ChatHome({ onSend, onSelectFolder, onCloneRepo }: Props) {
 
         {/* Action pills */}
         <div className="flex flex-wrap items-center justify-center gap-2">
-          {ACTIONS.map(a => (
+          {ACTIONS.map((a, i) => (
             <button
               key={a.label}
               onClick={() => { setInput(a.prefix); inputRef.current?.focus() }}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-[var(--border)] text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--text-disabled)] transition-colors cursor-pointer"
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-[var(--border)] text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--text-disabled)] transition-colors cursor-pointer animate-pill-float animate-pill-float-${i + 1}`}
             >
               <Icon icon={a.icon} width={14} height={14} />
               {a.label}

@@ -1,62 +1,60 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
+import { isSpotifyAuthenticated } from '@/lib/spotify-auth'
 
-const SPOTIFY_API = 'https://api.spotify.com/v1'
-
-function getToken(): string | null {
-  try { return localStorage.getItem('knot:spotify-token') } catch { return null }
+interface TrackInfo {
+  name: string
+  artist: string
+  paused: boolean
 }
 
 export function SpotifyStatusBar() {
-  const [trackInfo, setTrackInfo] = useState<{ name: string; artist: string; isPlaying: boolean } | null>(null)
+  const [track, setTrack] = useState<TrackInfo | null>(null)
+  const [authenticated, setAuthenticated] = useState(false)
 
-  const fetchTrack = useCallback(async () => {
-    const token = getToken()
-    if (!token) { setTrackInfo(null); return }
-    try {
-      const res = await fetch(`${SPOTIFY_API}/me/player/currently-playing`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.status === 204 || !res.ok) { setTrackInfo(null); return }
-      const data = await res.json()
-      if (!data?.item) { setTrackInfo(null); return }
-      setTrackInfo({
-        name: data.item.name,
-        artist: data.item.artists?.[0]?.name ?? '',
-        isPlaying: data.is_playing,
-      })
-    } catch {
-      setTrackInfo(null)
-    }
+  useEffect(() => {
+    setAuthenticated(isSpotifyAuthenticated())
+    const authHandler = () => setAuthenticated(isSpotifyAuthenticated())
+    window.addEventListener('spotify-auth-changed', authHandler)
+    return () => window.removeEventListener('spotify-auth-changed', authHandler)
   }, [])
 
   useEffect(() => {
-    fetchTrack()
-    const id = setInterval(fetchTrack, 10000)
-    return () => clearInterval(id)
-  }, [fetchTrack])
+    const handler = (e: Event) => {
+      const state = (e as CustomEvent).detail
+      if (!state?.track_window?.current_track) {
+        setTrack(null)
+        return
+      }
+      const t = state.track_window.current_track
+      setTrack({
+        name: t.name,
+        artist: t.artists?.[0]?.name ?? '',
+        paused: state.paused,
+      })
+    }
+    window.addEventListener('spotify-state-changed', handler)
+    return () => window.removeEventListener('spotify-state-changed', handler)
+  }, [])
 
-  useEffect(() => {
-    const handler = () => fetchTrack()
-    window.addEventListener('spotify-token-changed', handler)
-    return () => window.removeEventListener('spotify-token-changed', handler)
-  }, [fetchTrack])
-
-  if (!trackInfo) return null
+  if (!authenticated || !track) return null
 
   return (
-    <span className="flex items-center gap-1 max-w-[150px] text-[var(--text-tertiary)] cursor-default" title={`${trackInfo.name} — ${trackInfo.artist}`}>
+    <span
+      className="flex items-center gap-1 max-w-[150px] text-[var(--text-tertiary)] cursor-default"
+      title={`${track.name} — ${track.artist}`}
+    >
       <Icon
-        icon={trackInfo.isPlaying ? 'lucide:volume-2' : 'lucide:volume-x'}
+        icon={track.paused ? 'lucide:pause' : 'lucide:volume-2'}
         width={9}
         height={9}
-        className={trackInfo.isPlaying ? 'text-[#1DB954]' : ''}
+        className={track.paused ? '' : 'text-[#1DB954]'}
       />
       <span className="truncate text-[10px]">
-        {trackInfo.name}
-        {trackInfo.artist ? ` · ${trackInfo.artist}` : ''}
+        {track.name}
+        {track.artist ? ` · ${track.artist}` : ''}
       </span>
     </span>
   )

@@ -2,82 +2,106 @@
 
 import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
+import {
+  spotifyAvailable,
+  isSpotifyAuthenticated,
+  startSpotifyLogin,
+  clearSpotifyAuth,
+} from '@/lib/spotify-auth'
 
 export function SpotifySettings() {
-  const [token, setToken] = useState('')
-  const [saved, setSaved] = useState(false)
+  const [authenticated, setAuthenticated] = useState(false)
+  const [loggingIn, setLoggingIn] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    try {
-      const t = localStorage.getItem('knot:spotify-token')
-      if (t) setToken(t)
-    } catch {}
+    setAuthenticated(isSpotifyAuthenticated())
+    const handler = () => setAuthenticated(isSpotifyAuthenticated())
+    window.addEventListener('spotify-auth-changed', handler)
+    return () => window.removeEventListener('spotify-auth-changed', handler)
   }, [])
 
-  const save = () => {
+  const handleLogin = async () => {
+    setLoggingIn(true)
+    setError(null)
     try {
-      const trimmed = token.trim()
-      if (trimmed) {
-        localStorage.setItem('knot:spotify-token', trimmed)
-      } else {
-        localStorage.removeItem('knot:spotify-token')
-      }
-      window.dispatchEvent(new CustomEvent('spotify-token-changed'))
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-    } catch {}
+      await startSpotifyLogin()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed')
+    } finally {
+      setLoggingIn(false)
+    }
   }
 
-  const clear = () => {
-    setToken('')
-    try {
-      localStorage.removeItem('knot:spotify-token')
-      window.dispatchEvent(new CustomEvent('spotify-token-changed'))
-    } catch {}
+  const handleLogout = () => {
+    clearSpotifyAuth()
+    setError(null)
+  }
+
+  if (!spotifyAvailable()) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Icon icon="simple-icons:spotify" width={14} height={14} className="text-[#1DB954]" />
+          <span className="text-[11px] font-medium text-[var(--text-primary)]">Spotify</span>
+        </div>
+        <p className="text-[10px] text-[var(--text-tertiary)] leading-relaxed">
+          Set <code className="font-mono text-[9px] px-1 py-0.5 rounded bg-[var(--bg-subtle)]">NEXT_PUBLIC_SPOTIFY_CLIENT_ID</code> in your environment to enable Spotify integration.
+        </p>
+        <p className="text-[9px] text-[var(--text-disabled)]">
+          Create an app at{' '}
+          <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-[var(--brand)] hover:underline">
+            developer.spotify.com
+          </a>
+          . No client secret needed — uses PKCE flow.
+        </p>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <Icon icon="lucide:music" width={14} height={14} className="text-[#1DB954]" />
+        <Icon icon="simple-icons:spotify" width={14} height={14} className="text-[#1DB954]" />
         <span className="text-[11px] font-medium text-[var(--text-primary)]">Spotify</span>
       </div>
-      <p className="text-[10px] text-[var(--text-tertiary)] leading-relaxed">
-        Paste Spotify access token for mini-player. Get one from the{' '}
-        <a
-          href="https://developer.spotify.com/documentation/web-playback-sdk/tutorials/getting-started"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[var(--brand)] hover:underline"
-        >
-          Spotify Developer Console
-        </a>
-        {' '}(requires Premium).
-      </p>
-      <div className="flex items-center gap-1.5">
-        <input
-          type="password"
-          value={token}
-          onChange={e => setToken(e.target.value)}
-          placeholder="Paste access token..."
-          className="flex-1 h-7 px-2 text-[10px] rounded-md bg-[var(--bg)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] outline-none focus:border-[var(--brand)] transition-colors font-mono"
-        />
-        <button
-          onClick={save}
-          className="h-7 px-2.5 rounded-md text-[10px] font-medium bg-[var(--brand)] text-[var(--brand-contrast)] hover:opacity-90 cursor-pointer transition-opacity"
-        >
-          {saved ? 'Saved' : 'Save'}
-        </button>
-        {token && (
+
+      {authenticated ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg)]">
+            <Icon icon="lucide:check-circle" width={12} height={12} className="text-[var(--color-additions)] shrink-0" />
+            <span className="text-[10px] text-[var(--text-secondary)] flex-1">Connected to Spotify</span>
+            <button
+              onClick={handleLogout}
+              className="text-[9px] text-[var(--text-disabled)] hover:text-[var(--error)] transition-colors cursor-pointer"
+            >
+              Disconnect
+            </button>
+          </div>
+          <p className="text-[9px] text-[var(--text-disabled)]">
+            Premium account required for full playback. Use Ctrl+Shift+M to toggle the player.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-[10px] text-[var(--text-tertiary)] leading-relaxed">
+            Connect your Spotify Premium account to play full songs, search, and control playback from the editor.
+          </p>
           <button
-            onClick={clear}
-            className="h-7 px-2 rounded-md text-[10px] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] cursor-pointer transition-colors"
-            title="Clear token"
+            onClick={handleLogin}
+            disabled={loggingIn}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-medium bg-[#1DB954] text-white hover:bg-[#1ed760] transition-colors cursor-pointer disabled:opacity-50"
           >
-            <Icon icon="lucide:x" width={12} height={12} />
+            {loggingIn ? (
+              <Icon icon="lucide:loader-2" width={11} height={11} className="animate-spin" />
+            ) : (
+              <Icon icon="simple-icons:spotify" width={11} height={11} />
+            )}
+            {loggingIn ? 'Connecting...' : 'Connect Spotify'}
           </button>
-        )}
-      </div>
+          {error && <p className="text-[9px] text-[var(--error)]">{error}</p>}
+        </div>
+      )}
     </div>
   )
 }
