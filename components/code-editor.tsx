@@ -2,8 +2,12 @@
 
 import { useCallback, useRef } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
+import loader from '@monaco-editor/loader'
+import * as monaco from 'monaco-editor'
 import { Icon } from '@iconify/react'
 import { useEditor } from '@/context/editor-context'
+
+loader.config({ monaco })
 
 export function CodeEditor() {
   const { files, activeFile, updateFileContent } = useEditor()
