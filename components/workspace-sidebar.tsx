@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Icon } from '@iconify/react'
+import { isTauri } from '@/lib/tauri'
 
 export interface ChatSession {
   id: string
@@ -42,6 +43,8 @@ interface Props {
 }
 
 export function WorkspaceSidebar({ activeId, onSelect, onNew, collapsed, onToggle }: Props) {
+  const [isTauriDesktop, setIsTauriDesktop] = useState(false)
+  useEffect(() => { setIsTauriDesktop(isTauri()) }, [])
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [searchWS, setSearchWS] = useState('')
   const [searchChat, setSearchChat] = useState('')
@@ -89,7 +92,7 @@ export function WorkspaceSidebar({ activeId, onSelect, onNew, collapsed, onToggl
 
   if (collapsed) {
     return (
-      <div className="flex flex-col items-center py-3 gap-3 w-[42px] bg-[var(--sidebar-bg)] border-r border-[var(--border)] shrink-0">
+      <div className={`flex flex-col items-center gap-3 w-[42px] bg-[var(--sidebar-bg)] border-r border-[var(--border)] shrink-0 ${isTauriDesktop ? "pt-8" : "pt-3"} pb-3`}>
         <button onClick={onToggle} className="p-1.5 rounded-md hover:bg-[var(--bg-subtle)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors cursor-pointer" title="Expand sidebar">
           <Icon icon="lucide:panel-left" width={15} height={15} />
         </button>
@@ -107,10 +110,13 @@ export function WorkspaceSidebar({ activeId, onSelect, onNew, collapsed, onToggl
   }
 
   const renderSession = (s: ChatSession) => (
-    <button
+    <div
       key={s.id}
+      role="button"
+      tabIndex={0}
       onClick={() => onSelect(s.id)}
-      className={`group w-full text-left px-2.5 py-2 rounded-lg transition-all cursor-pointer ${
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(s.id) } }}
+      className={`group relative w-full text-left px-2.5 py-2 rounded-lg transition-all cursor-pointer ${
         activeId === s.id
           ? 'bg-[color-mix(in_srgb,var(--brand)_12%,transparent)] border border-[color-mix(in_srgb,var(--brand)_20%,transparent)]'
           : 'hover:bg-[var(--bg-subtle)] border border-transparent'
@@ -128,7 +134,6 @@ export function WorkspaceSidebar({ activeId, onSelect, onNew, collapsed, onToggl
           {s.deletions ? <span className="text-[9px] text-[var(--color-deletions)] font-mono">-{s.deletions}</span> : null}
         </div>
       )}
-      {/* Hover actions */}
       <div className="absolute right-1.5 top-1.5 hidden group-hover:flex items-center gap-0.5">
         <button onClick={(e) => handlePin(s.id, e)} className="p-0.5 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] cursor-pointer">
           <Icon icon={s.pinned ? 'lucide:pin-off' : 'lucide:pin'} width={9} height={9} />
@@ -137,13 +142,13 @@ export function WorkspaceSidebar({ activeId, onSelect, onNew, collapsed, onToggl
           <Icon icon="lucide:trash-2" width={9} height={9} />
         </button>
       </div>
-    </button>
+    </div>
   )
 
   return (
     <div className="flex flex-col h-full bg-[var(--sidebar-bg)] border-r border-[var(--border)] overflow-hidden" style={{ width: 240 }}>
-      {/* Header */}
-      <div className="flex items-center justify-between h-9 px-3 border-b border-[var(--border)] shrink-0">
+      {/* Header — extra top padding on Tauri for traffic lights */}
+      <div className={`flex items-center justify-between h-9 px-3 border-b border-[var(--border)] shrink-0 ${isTauriDesktop ? 'mt-6' : ''}`}>
         <div className="flex items-center gap-1.5">
           <button onClick={onToggle} className="p-0.5 rounded hover:bg-[var(--bg-subtle)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors cursor-pointer">
             <Icon icon="lucide:panel-left" width={13} height={13} />
