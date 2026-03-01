@@ -518,32 +518,27 @@ export function AgentPanel() {
             {msg.editProposals && msg.editProposals.length > 0 && (
               <div className="flex flex-col gap-1 mt-1.5">
                 {msg.editProposals.map((proposal, i) => (
-                  <div key={i} className="flex items-center gap-1">
+                  <div key={i} className="flex items-center gap-1 flex-wrap">
                     <button
                       onClick={() => handleQuickApply(proposal)}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-l-md text-[10px] font-medium border transition-colors cursor-pointer"
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-medium border transition-colors cursor-pointer"
                       style={{
                         borderColor: 'color-mix(in srgb, var(--color-additions) 40%, transparent)',
                         backgroundColor: 'color-mix(in srgb, var(--color-additions) 12%, transparent)',
                         color: 'var(--color-additions)',
                       }}
-                      title="Apply changes directly"
+                      title="Apply changes to editor"
                     >
-                      <Icon icon="lucide:check" width={12} height={12} />
-                      Apply
+                      <Icon icon="lucide:play" width={12} height={12} />
+                      Apply to {proposal.filePath.split('/').pop()}
                     </button>
                     <button
                       onClick={() => handleShowDiff(proposal, msg.id)}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-r-md text-[10px] font-medium border border-l-0 transition-colors cursor-pointer"
-                      style={{
-                        borderColor: 'color-mix(in srgb, var(--brand) 30%, transparent)',
-                        backgroundColor: 'color-mix(in srgb, var(--brand) 8%, transparent)',
-                        color: 'var(--brand)',
-                      }}
-                      title="Review changes in diff viewer"
+                      className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium transition-colors cursor-pointer text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                      title="Review changes in diff viewer first"
                     >
                       <Icon icon="lucide:git-compare" width={12} height={12} />
-                      Diff: {proposal.filePath}
+                      Diff
                     </button>
                   </div>
                 ))}

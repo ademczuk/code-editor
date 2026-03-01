@@ -288,6 +288,36 @@ function EditorLayout() {
     }
   }, [repo, activeFile, getFile, markClean])
 
+  // Handle save-file events (⌘S or Save button)
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const { path } = (e as CustomEvent).detail
+      if (!repo) return
+      const file = files.find(f => f.path === path)
+      if (!file || !file.dirty) return
+
+      try {
+        const res = await fetch(`/api/github/repos/${repo.owner}/${repo.repo}/commit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            branch: repo.branch,
+            message: `Update ${path}`,
+            files: [{ path, content: file.content, sha: file.sha }],
+          }),
+        })
+        if (!res.ok) throw new Error(await res.text())
+        const data = await res.json()
+        // Mark file as clean
+        markClean(path, data.sha)
+      } catch (err) {
+        console.error('Save failed:', err)
+      }
+    }
+    window.addEventListener('save-file', handler)
+    return () => window.removeEventListener('save-file', handler)
+  }, [repo, files])
+
   // Handle file-select events from explorer
   useEffect(() => {
     const handler = async (e: Event) => {
@@ -331,6 +361,14 @@ function EditorLayout() {
       if (e.metaKey || e.ctrlKey) {
         if (!e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); setCommandPaletteVisible(true); return }
         if (e.key === 's') { e.preventDefault(); void saveActiveFile(); return }
+        if (e.key === 's') {
+          e.preventDefault()
+          const active = files.find(f => f.path === activeFile)
+          if (active?.dirty) {
+            window.dispatchEvent(new CustomEvent('save-file', { detail: { path: active.path } }))
+          }
+          return
+        }
         if (e.key === 'b') { e.preventDefault(); setExplorerVisible(v => !v) }
         if (e.key === 'j') { e.preventDefault(); setAgentOpen(v => !v) }
         if (e.key === 'p') { e.preventDefault(); setQuickOpenVisible(v => !v) }

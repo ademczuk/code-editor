@@ -2318,3 +2318,201 @@ p { line-height: 1.6; }
   --radius-md: 6px;
   --radius-lg: 10px;
 }
+
+/* ─── Caffeine Light ───────────────────────────────────────── */
+[data-theme="caffeine"]:not(.dark) {
+  --bg: #faf6f0;
+  --bg-elevated: #f2ece4;
+  --bg-subtle: #ebe4d8;
+  --bg-secondary: #f5efe7;
+  --bg-tertiary: #e4dcd0;
+  --foreground: #3d3428;
+  --subtle: #a0917e;
+
+  --brand: #9a6e3a;
+  --brand-hover: #b07e44;
+  --brand-muted: rgba(154, 110, 58, 0.1);
+
+  --success: #5a7a3a;
+  --warning: #b8860b;
+  --error: #a04030;
+  --info: #5a7a9a;
+
+  --text-primary: #3d3428;
+  --text-secondary: #6b5e4e;
+  --text-tertiary: #a0917e;
+  --text-disabled: #c8bfb2;
+
+  --border: #ddd4c6;
+  --border-hover: #cdc2b2;
+  --border-focus: #9a6e3a;
+
+  --glass-bg: rgba(250, 246, 240, 0.95);
+  --glass-bg-hover: var(--bg-subtle);
+  --glass-bg-elevated: var(--bg-subtle);
+  --glass-border: var(--border);
+  --glass-border-hover: rgba(61, 52, 40, 0.1);
+  --glass-shadow: rgba(154, 110, 58, 0.06);
+  --brand-glow: rgba(154, 110, 58, 0.1);
+  --brand-glow-subtle: rgba(154, 110, 58, 0.04);
+  --brand-deep: #6a4e2a;
+  --brand-chat: #8a6438;
+  --brand-contrast: #faf6f0;
+
+  --shadow-sm: 0 1px 2px rgba(154, 110, 58, 0.06);
+  --shadow-md: 0 2px 6px rgba(154, 110, 58, 0.08);
+  --shadow-lg: 0 6px 20px rgba(154, 110, 58, 0.1);
+
+  --kn-claw: var(--brand);
+  --vscode-text: var(--text-primary);
+  --vscode-subtle: var(--text-tertiary);
+  --vscode-muted: var(--text-secondary);
+
+  --overlay: rgba(250, 246, 240, 0.70);
+  --logo-filter: invert(1);
+
+  --scrollbar-thumb: #cdc2b2;
+  --scrollbar-thumb-hover: #bdb2a2;
+  --header-glass-bg: rgba(250, 246, 240, 0.95);
+  --shimmer-from: var(--bg-elevated);
+  --shimmer-via: var(--bg-subtle);
+
+  --color-additions: #5a7a3a;
+  --color-deletions: #a04030;
+
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
+}
+
+/* ─── Claymorphism Light ───────────────────────────────────── */
+[data-theme="claymorphism"]:not(.dark) {
+  --bg: #f0eef8;
+  --bg-elevated: #e6e3f2;
+  --bg-subtle: #ddd9ec;
+  --bg-secondary: #eae8f4;
+  --bg-tertiary: #d5d0e6;
+  --foreground: #2e2d40;
+  --subtle: #8886a8;
+
+  --brand: #9b72cf;
+  --brand-hover: #ab82df;
+  --brand-muted: rgba(155, 114, 207, 0.1);
+
+  --success: #6a9a5a;
+  --warning: #c09830;
+  --error: #c45b5b;
+  --info: #5a8ab0;
+
+  --text-primary: #2e2d40;
+  --text-secondary: #5c5a78;
+  --text-tertiary: #8886a8;
+  --text-disabled: #b4b2c8;
+
+  --border: #ccc8e0;
+  --border-hover: #bbb6d4;
+  --border-focus: #9b72cf;
+
+  --glass-bg: rgba(240, 238, 248, 0.95);
+  --glass-bg-hover: var(--bg-subtle);
+  --glass-bg-elevated: var(--bg-subtle);
+  --glass-border: var(--border);
+  --glass-border-hover: rgba(46, 45, 64, 0.1);
+  --glass-shadow: rgba(155, 114, 207, 0.06);
+  --brand-glow: rgba(155, 114, 207, 0.12);
+  --brand-glow-subtle: rgba(155, 114, 207, 0.05);
+  --brand-deep: #6a4a94;
+  --brand-chat: #7a5aaa;
+  --brand-contrast: #f0eef8;
+
+  --shadow-sm: 0 2px 4px rgba(46, 45, 64, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --shadow-md: 0 4px 12px rgba(46, 45, 64, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --shadow-lg: 0 8px 32px rgba(46, 45, 64, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+
+  --kn-claw: var(--brand);
+  --vscode-text: var(--text-primary);
+  --vscode-subtle: var(--text-tertiary);
+  --vscode-muted: var(--text-secondary);
+
+  --overlay: rgba(240, 238, 248, 0.70);
+  --logo-filter: invert(1);
+
+  --scrollbar-thumb: #bbb6d4;
+  --scrollbar-thumb-hover: #aaa4c8;
+  --header-glass-bg: rgba(240, 238, 248, 0.95);
+  --shimmer-from: var(--bg-elevated);
+  --shimmer-via: var(--bg-subtle);
+
+  --color-additions: #6a9a5a;
+  --color-deletions: #c45b5b;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+}
+
+/* ─── Vercel Light ─────────────────────────────────────────── */
+[data-theme="vercel"]:not(.dark) {
+  --bg: #ffffff;
+  --bg-elevated: #fafafa;
+  --bg-subtle: #f5f5f5;
+  --bg-secondary: #fcfcfc;
+  --bg-tertiary: #eeeeee;
+  --foreground: #171717;
+  --subtle: #999;
+
+  --brand: #000000;
+  --brand-hover: #333333;
+  --brand-muted: rgba(0, 0, 0, 0.05);
+
+  --success: #0070f3;
+  --warning: #f5a623;
+  --error: #ee0000;
+  --info: #0070f3;
+
+  --text-primary: #171717;
+  --text-secondary: #666;
+  --text-tertiary: #999;
+  --text-disabled: #ccc;
+
+  --border: #eaeaea;
+  --border-hover: #ddd;
+  --border-focus: #000;
+
+  --glass-bg: rgba(255, 255, 255, 0.95);
+  --glass-bg-hover: var(--bg-subtle);
+  --glass-bg-elevated: var(--bg-subtle);
+  --glass-border: var(--border);
+  --glass-border-hover: rgba(0, 0, 0, 0.08);
+  --glass-shadow: rgba(0, 0, 0, 0.04);
+  --brand-glow: rgba(0, 0, 0, 0.05);
+  --brand-glow-subtle: rgba(0, 0, 0, 0.02);
+  --brand-deep: #333;
+  --brand-chat: #555;
+  --brand-contrast: #ffffff;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.08);
+
+  --kn-claw: var(--brand);
+  --vscode-text: var(--text-primary);
+  --vscode-subtle: var(--text-tertiary);
+  --vscode-muted: var(--text-secondary);
+
+  --overlay: rgba(255, 255, 255, 0.70);
+  --logo-filter: invert(1);
+
+  --scrollbar-thumb: #ddd;
+  --scrollbar-thumb-hover: #ccc;
+  --header-glass-bg: rgba(255, 255, 255, 0.95);
+  --shimmer-from: #fafafa;
+  --shimmer-via: #f5f5f5;
+
+  --color-additions: #0070f3;
+  --color-deletions: #ee0000;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+}

@@ -356,29 +356,17 @@ export function CodeEditor() {
           )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* Vim mode toggle + cheatsheet */}
-          <div className="flex items-center">
+          {/* Save button */}
+          {file.dirty && (
             <button
-              onClick={() => setVimEnabled(v => !v)}
-              className={`flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono transition-colors cursor-pointer ${
-                vimEnabled
-                  ? 'bg-[color-mix(in_srgb,var(--brand)_15%,transparent)] text-[var(--brand)] border border-[color-mix(in_srgb,var(--brand)_30%,transparent)] rounded-l'
-                  : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] rounded'
-              }`}
-              title={vimEnabled ? 'Disable Vim mode' : 'Enable Vim mode'}
+              onClick={() => window.dispatchEvent(new CustomEvent('save-file', { detail: { path: file.path } }))}
+              className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer bg-[color-mix(in_srgb,var(--brand)_12%,transparent)] text-[var(--brand)] hover:bg-[color-mix(in_srgb,var(--brand)_20%,transparent)] border border-[color-mix(in_srgb,var(--brand)_25%,transparent)]"
+              title="Save file (commit to GitHub)"
             >
-              VIM
+              <Icon icon="lucide:save" width={11} height={11} />
+              Save
             </button>
-            {vimEnabled && (
-              <button
-                onClick={() => setVimCheatsheetOpen(true)}
-                className="px-1 py-0.5 rounded-r border border-l-0 border-[color-mix(in_srgb,var(--brand)_30%,transparent)] bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] text-[var(--brand)] hover:bg-[color-mix(in_srgb,var(--brand)_20%,transparent)] transition-colors cursor-pointer"
-                title="Vim Cheatsheet"
-              >
-                <Icon icon="lucide:help-circle" width={11} height={11} />
-              </button>
-            )}
-          </div>
+          )}
           {isMarkdown && (
             <MarkdownModeToggle mode={markdownMode} onModeChange={setMarkdownMode} />
           )}
