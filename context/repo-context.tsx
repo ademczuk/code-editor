@@ -41,7 +41,8 @@ export function RepoProvider({ children }: { children: ReactNode }) {
       const res = await fetch(`/api/github/repos/${repo.owner}/${repo.repo}/tree?recursive=true`)
       if (!res.ok) throw new Error(`Failed to load tree: ${res.statusText}`)
       const data = await res.json()
-      setTree(data.tree ?? data ?? [])
+      const nodes = Array.isArray(data.tree) ? data.tree : Array.isArray(data) ? data : []
+      setTree(nodes)
     } catch (err) {
       setTreeError(err instanceof Error ? err.message : 'Failed to load tree')
     } finally {
