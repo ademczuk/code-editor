@@ -1,5 +1,4 @@
-import { authkitMiddleware } from '@workos-inc/authkit-nextjs'
-import { NextFetchEvent, NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
 /**
  * Combined proxy: IP allowlist + WorkOS AuthKit session management.
@@ -78,13 +77,6 @@ function checkIp(request: NextRequest): NextResponse | null {
   return null
 }
 
-const authMiddleware = authkitMiddleware({
-  middlewareAuth: {
-    enabled: true,
-    unauthenticatedPaths: [],
-  },
-})
-
 const SECURITY_HEADERS: Record<string, string> = {
   'X-Frame-Options': 'DENY',
   'X-Content-Type-Options': 'nosniff',
@@ -112,7 +104,7 @@ function applySecurityHeaders(response: NextResponse): NextResponse {
   return response
 }
 
-export default async function middleware(request: NextRequest, event: NextFetchEvent) {
+export default async function middleware(request: NextRequest) {
   // CORS preflight
   if (request.method === 'OPTIONS') {
     return new NextResponse(null, {
@@ -129,11 +121,8 @@ export default async function middleware(request: NextRequest, event: NextFetchE
   const blocked = checkIp(request)
   if (blocked) return blocked
 
-  const response = await authMiddleware(request, event)
-  if (response instanceof NextResponse) {
-    return applySecurityHeaders(response)
-  }
-  return response
+  const response = NextResponse.next()
+  return applySecurityHeaders(response)
 }
 
 export const config = {

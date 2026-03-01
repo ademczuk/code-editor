@@ -601,61 +601,98 @@ export async function replyToReviewComment(
 
 // ─── Code Browser ───────────────────────────────────────────────
 
-export async function fetchRepoTree(repo: string, ref?: string, headRepo?: string): Promise<TreeEntry[]> {
-  const [owner, repoName] = repo.split('/')
-  const qp = new URLSearchParams()
-  if (ref) qp.set('ref', ref)
-  // For fork PRs, pass head repo so the API fetches from the fork
-  if (headRepo && headRepo !== repo) {
-    const [ho, hr] = headRepo.split('/')
-    qp.set('headOwner', ho)
-    qp.set('headRepo', hr)
-  }
-  const params = qp.toString() ? `?${qp}` : ''
-  const res = await fetch(`/api/github/repos/${owner}/${repoName}/tree${params}`, { headers: authHeaders() })
-  if (!res.ok) throw new GitHubClientError(`Failed to fetch tree: ${res.status}`, { status: res.status })
-  const data = (await res.json()) as { entries: TreeEntry[] }
-  return data.entries
+const GITHUB_API_HEADERS = {
+  Accept: 'application/vnd.github+json',
+  'X-GitHub-Api-Version': '2022-11-28',
 }
 
-const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif', 'tiff', 'tif'])
+const BINARY_EXTS = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif', 'tiff', 'tif', 'svg', 'heic', 'heif',
+  'mp4', 'webm', 'ogv', 'mov', 'm4v', 'avi', 'mkv',
+  'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus',
+])
 
-function isImagePath(filePath: string): boolean {
+function isBinaryPath(filePath: string): boolean {
   const ext = filePath.split('.').pop()?.toLowerCase() ?? ''
-  return IMAGE_EXTS.has(ext)
+  return BINARY_EXTS.has(ext)
+}
+
+function encodeGitHubPath(path: string): string {
+  return path.split('/').map(segment => encodeURIComponent(segment)).join('/')
+}
+
+export async function fetchRepoTree(repo: string, ref?: string, headRepo?: string): Promise<TreeEntry[]> {
+  const [owner, repoName] = (headRepo || repo).split('/')
+  const targetRef = ref || 'HEAD'
+
+  const refRes = await fetch(
+    `https://api.github.com/repos/${owner}/${repoName}/commits?sha=${encodeURIComponent(targetRef)}&per_page=1`,
+    { headers: { ...authHeaders(), ...GITHUB_API_HEADERS } },
+  )
+  if (!refRes.ok) throw new GitHubClientError(`Failed to resolve ref: ${refRes.status}`, { status: refRes.status })
+  const commits = await refRes.json() as Array<{ sha: string }>
+  const commitSha = commits[0]?.sha
+  if (!commitSha) throw new GitHubClientError(`No commits found for ref ${targetRef}`, { status: 404 })
+
+  const treeRes = await fetch(
+    `https://api.github.com/repos/${owner}/${repoName}/git/trees/${commitSha}?recursive=1`,
+    { headers: { ...authHeaders(), ...GITHUB_API_HEADERS } },
+  )
+  if (!treeRes.ok) throw new GitHubClientError(`Failed to fetch tree: ${treeRes.status}`, { status: treeRes.status })
+
+  const data = await treeRes.json() as {
+    tree: Array<{ path: string; type: string; size?: number; sha: string }>
+  }
+
+  return data.tree
+    .filter((entry) => entry.type === 'blob' || entry.type === 'tree')
+    .map((entry) => ({
+      path: entry.path,
+      type: entry.type as 'blob' | 'tree',
+      size: entry.size,
+      sha: entry.sha,
+    }))
 }
 
 export async function fetchFileContents(repo: string, path: string, ref?: string, headRepo?: string): Promise<FileContent> {
-  const [owner, repoName] = repo.split('/')
+  const [owner, repoName] = (headRepo || repo).split('/')
+  const encodedPath = encodeGitHubPath(path)
   const qp = new URLSearchParams()
   if (ref) qp.set('ref', ref)
-  if (headRepo && headRepo !== repo) {
-    const [ho, hr] = headRepo.split('/')
-    qp.set('headOwner', ho)
-    qp.set('headRepo', hr)
-  }
-  const params = qp.toString() ? `?${qp}` : ''
-  const res = await fetch(`/api/github/repos/${owner}/${repoName}/contents/${path}${params}`, { headers: authHeaders() })
+  const params = qp.toString() ? `?${qp.toString()}` : ''
+
+  const res = await fetch(`https://api.github.com/repos/${owner}/${repoName}/contents/${encodedPath}${params}`, {
+    headers: { ...authHeaders(), ...GITHUB_API_HEADERS },
+  })
   if (!res.ok) throw new GitHubClientError(`Failed to fetch file: ${res.status}`, { status: res.status })
+
   const data = await res.json()
   let content = data.content ?? ''
   if (data.encoding === 'base64' && content) {
-    if (isImagePath(path)) {
+    if (isBinaryPath(path)) {
       content = content.replace(/\n/g, '')
     } else {
       const bin = atob(content.replace(/\n/g, ''))
       content = new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)))
     }
   }
+
   return {
-    name: data.name, path: data.path, sha: data.sha, size: data.size,
-    content, encoding: data.encoding, download_url: data.download_url,
+    name: data.name,
+    path: data.path,
+    sha: data.sha,
+    size: data.size,
+    content,
+    encoding: data.encoding,
+    download_url: data.download_url,
   }
 }
 
 export async function fetchBranches(repo: string): Promise<Branch[]> {
   const [owner, repoName] = repo.split('/')
-  const res = await fetch(`/api/github/repos/${owner}/${repoName}/branches`, { headers: authHeaders() })
+  const res = await fetch(`https://api.github.com/repos/${owner}/${repoName}/branches?per_page=100`, {
+    headers: { ...authHeaders(), ...GITHUB_API_HEADERS },
+  })
   if (!res.ok) throw new GitHubClientError(`Failed to fetch branches: ${res.status}`, { status: res.status })
   return res.json()
 }
@@ -667,11 +704,22 @@ export async function createOrUpdateFile(
 ): Promise<{ sha: string }> {
   assertWritable()
   const [owner, repoName] = repo.split('/')
-  const res = await fetch(`/api/github/repos/${owner}/${repoName}/contents/${path}`, {
+  const encodedPath = encodeGitHubPath(path)
+  const res = await fetch(`https://api.github.com/repos/${owner}/${repoName}/contents/${encodedPath}`, {
     method: 'PUT',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify(opts),
+    headers: {
+      ...authHeaders(),
+      ...GITHUB_API_HEADERS,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      ...opts,
+      content: btoa(unescape(encodeURIComponent(opts.content))),
+    }),
   })
   if (!res.ok) throw new GitHubClientError(`Failed to save file: ${res.status}`, { status: res.status })
-  return res.json()
+  const data = await res.json() as { content?: { sha?: string } }
+  const sha = data.content?.sha
+  if (!sha) throw new GitHubClientError('Failed to parse save response')
+  return { sha }
 }

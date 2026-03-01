@@ -15,6 +15,7 @@ import { ThemeSwitcher } from '@/components/theme-switcher'
 import { QuickOpen } from '@/components/quick-open'
 import { ShortcutsOverlay } from '@/components/shortcuts-overlay'
 import { CommandPalette, type CommandId } from '@/components/command-palette'
+import { fetchFileContents } from '@/lib/github-client'
 import { TerminalPanel } from '@/components/terminal-panel'
 import { EnginePanel } from '@/components/engine-panel'
 
@@ -69,12 +70,6 @@ function getMediaMeta(path: string): { kind: 'image' | 'video' | 'audio'; mimeTy
 
 function toDataUrl(base64: string, mimeType: string): string {
   return `data:${mimeType};base64,${base64.replace(/\n/g, '')}`
-}
-
-function decodeBase64Utf8(input: string): string {
-  const normalized = input.replace(/\n/g, '')
-  const binary = atob(normalized)
-  return new TextDecoder().decode(Uint8Array.from(binary, c => c.charCodeAt(0)))
 }
 
 // ─── Gateway Login ──────────────────────────────────────────────
@@ -282,13 +277,11 @@ function EditorLayout() {
       const { path, sha } = (e as CustomEvent).detail
       if (!repo) return
       try {
-        const res = await fetch(`/api/github/repos/${repo.owner}/${repo.repo}/contents/${path}`)
-        if (!res.ok) throw new Error('Failed to fetch file')
-        const data = await res.json()
+        const data = await fetchFileContents(repo.fullName, path, repo.branch)
         const media = getMediaMeta(path)
 
         if (media) {
-          const content = typeof data.content === 'string' && data.content.length > 0
+          const content = data.encoding === 'base64' && typeof data.content === 'string' && data.content.length > 0
             ? toDataUrl(data.content, media.mimeType)
             : typeof data.download_url === 'string' && data.download_url.length > 0
               ? data.download_url
@@ -297,7 +290,7 @@ function EditorLayout() {
           return
         }
 
-        const content = data.content ? decodeBase64Utf8(data.content) : data.text ?? ''
+        const content = data.content ?? ''
         openFile(path, content, data.sha ?? sha, { kind: 'text' })
       } catch (err) {
         console.error('Failed to open file:', err)

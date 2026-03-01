@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { fetchRepoTree } from '@/lib/github-client'
 
 export interface RepoInfo {
   owner: string
@@ -38,10 +39,7 @@ export function RepoProvider({ children }: { children: ReactNode }) {
     setTreeLoading(true)
     setTreeError(null)
     try {
-      const res = await fetch(`/api/github/repos/${repo.owner}/${repo.repo}/tree?recursive=true`)
-      if (!res.ok) throw new Error(`Failed to load tree: ${res.statusText}`)
-      const data = await res.json()
-      const nodes = Array.isArray(data.entries) ? data.entries : Array.isArray(data.tree) ? data.tree : Array.isArray(data) ? data : []
+      const nodes = await fetchRepoTree(repo.fullName, repo.branch)
       setTree(nodes)
     } catch (err) {
       setTreeError(err instanceof Error ? err.message : 'Failed to load tree')
