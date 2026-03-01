@@ -1,17 +1,31 @@
 'use client'
 
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import loader from '@monaco-editor/loader'
-import * as monaco from 'monaco-editor'
 import { Icon } from '@iconify/react'
 import { useEditor } from '@/context/editor-context'
-
-loader.config({ monaco })
 
 export function CodeEditor() {
   const { files, activeFile, updateFileContent } = useEditor()
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
+  const [monacoReady, setMonacoReady] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+
+    const initMonaco = async () => {
+      const monaco = await import('monaco-editor')
+      loader.config({ monaco })
+      if (mounted) setMonacoReady(true)
+    }
+
+    void initMonaco()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const file = files.find(f => f.path === activeFile)
 
@@ -58,32 +72,36 @@ export function CodeEditor() {
 
       {/* Monaco */}
       <div className="flex-1 min-h-0">
-        <Editor
-          key={file.path}
-          defaultValue={file.content}
-          language={file.language}
-          theme="vs-dark"
-          onChange={handleChange}
-          onMount={handleMount}
-          options={{
-            fontSize: 13,
-            fontFamily: "'SF Mono', 'Fira Code', 'JetBrains Mono', Menlo, monospace",
-            fontLigatures: true,
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            padding: { top: 12 },
-            lineNumbers: 'on',
-            renderLineHighlight: 'line',
-            bracketPairColorization: { enabled: true },
-            guides: { indentation: true, bracketPairs: true },
-            smoothScrolling: true,
-            cursorBlinking: 'smooth',
-            cursorSmoothCaretAnimation: 'on',
-            tabSize: 2,
-            wordWrap: 'on',
-            automaticLayout: true,
-          }}
-        />
+        {monacoReady ? (
+          <Editor
+            key={file.path}
+            defaultValue={file.content}
+            language={file.language}
+            theme="vs-dark"
+            onChange={handleChange}
+            onMount={handleMount}
+            options={{
+              fontSize: 13,
+              fontFamily: "'SF Mono', 'Fira Code', 'JetBrains Mono', Menlo, monospace",
+              fontLigatures: true,
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+              padding: { top: 12 },
+              lineNumbers: 'on',
+              renderLineHighlight: 'line',
+              bracketPairColorization: { enabled: true },
+              guides: { indentation: true, bracketPairs: true },
+              smoothScrolling: true,
+              cursorBlinking: 'smooth',
+              cursorSmoothCaretAnimation: 'on',
+              tabSize: 2,
+              wordWrap: 'on',
+              automaticLayout: true,
+            }}
+          />
+        ) : (
+          <div className="h-full w-full bg-[var(--bg)]" />
+        )}
       </div>
     </div>
   )

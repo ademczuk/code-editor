@@ -100,6 +100,7 @@ const SECURITY_HEADERS: Record<string, string> = {
     "img-src 'self' data: https:",
     "font-src 'self' data:",
     "connect-src 'self' ws: wss: https:",
+    "worker-src 'self' blob:",
     "frame-ancestors 'none'",
   ].join('; '),
 }
