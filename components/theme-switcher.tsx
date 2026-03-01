@@ -15,20 +15,39 @@ export function ThemeSwitcher() {
   const { themeId, mode, setThemeId, setMode } = useTheme()
   const [open, setOpen] = useState(false)
   const [studioOpen, setStudioOpen] = useState(false)
+  const [previewId, setPreviewId] = useState<string | null>(null)
+  const originalThemeRef = useRef<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        if (previewId && originalThemeRef.current && previewId !== originalThemeRef.current) {
+          setThemeId(originalThemeRef.current)
+        }
+        setPreviewId(null)
+        setOpen(false)
+      }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [])
+  }, [previewId, setThemeId])
 
   return (
     <div ref={ref} className="relative">
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          if (!open) {
+            originalThemeRef.current = themeId
+            setPreviewId(null)
+          } else {
+            if (previewId && originalThemeRef.current && previewId !== originalThemeRef.current) {
+              setThemeId(originalThemeRef.current)
+            }
+            setPreviewId(null)
+          }
+          setOpen(!open)
+        }}
         className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer"
         title="Theme & mode"
       >
@@ -69,38 +88,60 @@ export function ThemeSwitcher() {
                   {group === 'core' ? 'Themes' : 'tweakcn'}
                 </span>
               </div>
-              {THEME_PRESETS.filter(t => t.group === group).map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => { setThemeId(t.id); setOpen(false) }}
-                  className={`flex items-center gap-2.5 w-full px-3 py-1.5 text-left transition-colors cursor-pointer ${
-                    themeId === t.id
-                      ? 'bg-[color-mix(in_srgb,var(--brand)_10%,transparent)] text-[var(--text-primary)]'
-                      : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  <span
-                    className="w-3 h-3 rounded-full shrink-0 border border-[var(--border)]"
-                    style={{ backgroundColor: t.color }}
-                  />
-                  <span className="text-[12px]">{t.label}</span>
-                  {themeId === t.id && (
-                    <Icon icon="lucide:check" width={12} height={12} className="ml-auto text-[var(--brand)]" />
-                  )}
-                </button>
-              ))}
+              {THEME_PRESETS.filter(t => t.group === group).map(t => {
+                const isActive = themeId === t.id
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => { setPreviewId(t.id); setThemeId(t.id) }}
+                    className={`flex items-center gap-2.5 w-full px-3 py-1.5 text-left transition-colors cursor-pointer ${
+                      isActive
+                        ? 'bg-[color-mix(in_srgb,var(--brand)_10%,transparent)] text-[var(--text-primary)]'
+                        : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0 border border-[var(--border)]"
+                      style={{ backgroundColor: t.color }}
+                    />
+                    <span className="text-[12px]">{t.label}</span>
+                    {isActive && (
+                      <Icon icon="lucide:check" width={12} height={12} className="ml-auto text-[var(--brand)]" />
+                    )}
+                  </button>
+                )
+              })}
             </div>
           ))}
 
           <div className="h-px bg-[var(--border)] mx-2 my-1" />
 
-          <button
-            onClick={() => { setOpen(false); setStudioOpen(true) }}
-            className="flex items-center gap-2.5 w-full px-3 py-1.5 text-left transition-colors cursor-pointer text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
-          >
-            <Icon icon="lucide:wand-sparkles" width={12} height={12} className="shrink-0" />
-            <span className="text-[12px]">Theme Studio</span>
-          </button>
+          {/* Apply + Theme Studio */}
+          <div className="px-2 py-1.5 flex gap-1.5">
+            <button
+              onClick={() => {
+                originalThemeRef.current = themeId
+                setPreviewId(null)
+                setOpen(false)
+              }}
+              className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-[11px] font-medium bg-[var(--brand)] text-white hover:opacity-90 transition-all cursor-pointer"
+            >
+              <Icon icon="lucide:check" width={12} height={12} />
+              Apply
+            </button>
+            <button
+              onClick={() => {
+                originalThemeRef.current = themeId
+                setPreviewId(null)
+                setOpen(false)
+                setStudioOpen(true)
+              }}
+              className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-md text-[11px] font-medium border border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all cursor-pointer"
+              title="Theme Studio"
+            >
+              <Icon icon="lucide:wand-sparkles" width={12} height={12} />
+            </button>
+          </div>
         </div>
       )}
 

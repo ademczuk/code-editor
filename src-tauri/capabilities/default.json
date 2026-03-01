@@ -7,6 +7,10 @@
   ],
   "permissions": [
     "core:default",
-    "core:window:allow-start-dragging"
+    "core:window:default",
+    "core:window:allow-start-dragging",
+    "core:webview:default",
+    "core:menu:default",
+    "window-state:default"
   ]
 }

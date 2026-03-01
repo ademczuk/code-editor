@@ -437,6 +437,18 @@ function EditorLayout() {
     const isMacOS = navigator.userAgent.includes('Mac')
     setIsTauriDesktop(runningInTauri)
     setIsMacTauri(runningInTauri && isMacOS)
+
+    // Add vibrancy class for transparent backgrounds
+    if (runningInTauri) {
+      document.body.classList.add('tauri-vibrancy')
+    }
+
+    // Restore window state
+    if (runningInTauri) {
+      import('@tauri-apps/plugin-window-state').then(({ restoreStateCurrent }) => {
+        restoreStateCurrent().catch(() => {})
+      }).catch(() => {})
+    }
   }, [])
 
   const handleRunCommand = useCallback((commandId: CommandId) => {
