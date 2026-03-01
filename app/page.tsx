@@ -6,14 +6,13 @@ import { useAuth } from '@workos-inc/authkit-nextjs/components'
 import { useGateway } from '@/context/gateway-context'
 import { useRepo } from '@/context/repo-context'
 import { useEditor } from '@/context/editor-context'
-import { useLocal, getRecentFolders } from '@/context/local-context'
+import { useLocal } from '@/context/local-context'
 import { GitHubAuthBadge } from '@/components/github-auth'
 import { FileExplorer } from '@/components/file-explorer'
 import { EditorTabs } from '@/components/editor-tabs'
 import { CodeEditor } from '@/components/code-editor'
 import { AgentPanel } from '@/components/agent-panel'
-import { RepoSelector } from '@/components/repo-selector'
-import { SourceSwitcher } from '@/components/source-switcher'
+import { SourceSwitcher, SourceModeIndicator } from '@/components/source-switcher'
 import { ResizeHandle } from '@/components/resize-handle'
 import { ThemeSwitcher } from '@/components/theme-switcher'
 import { QuickOpen } from '@/components/quick-open'
@@ -22,6 +21,7 @@ import { CommandPalette, type CommandId } from '@/components/command-palette'
 import { fetchFileContents, createOrUpdateFile, commitFiles } from '@/lib/github-client'
 import { TerminalPanel } from '@/components/terminal-panel'
 import { ChangesPanel } from '@/components/changes-panel'
+import { GatewayConnectBanner, GatewayConnectPopover } from '@/components/gateway-connect'
 import Landing from '@/components/landing'
 import { EnginePanel } from '@/components/engine-panel'
 
@@ -213,6 +213,7 @@ function EditorLayout() {
   const [terminalVisible, setTerminalVisible] = useState(false)
   const [terminalHeight, setTerminalHeight] = useState(260)
   const [engineVisible, setEngineVisible] = useState(false)
+  const [gatewayPopoverOpen, setGatewayPopoverOpen] = useState(false)
   const [isTauriDesktop, setIsTauriDesktop] = useState(false)
   const [isMacTauri, setIsMacTauri] = useState(false)
 
@@ -460,7 +461,7 @@ function EditorLayout() {
           </div>
           <div className="w-px h-5 bg-[var(--border)]" />
           <div className={isTauriDesktop ? 'tauri-no-drag' : ''}>
-            {local.available ? <SourceSwitcher /> : <RepoSelector />}
+            <SourceSwitcher />
           </div>
         </div>
 
@@ -474,6 +475,9 @@ function EditorLayout() {
           </div>
         </div>
       </header>
+
+      {/* Gateway connect banner — prominent when disconnected */}
+      <GatewayConnectBanner />
 
       {/* Main content */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -630,14 +634,24 @@ function EditorLayout() {
       {/* Status bar */}
       <footer className="flex items-center justify-between px-3 h-6 border-t border-[var(--border)] bg-[var(--bg-elevated)] text-[9px] text-[var(--text-tertiary)] shrink-0">
         <div className="flex items-center gap-2.5">
-          <span className={`flex items-center gap-1 ${
-            status === 'connected' ? 'text-[var(--color-additions)]' : 'text-[var(--text-tertiary)]'
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full transition-colors ${
-              status === 'connected' ? 'bg-[var(--color-additions)] animate-breathe' : 'bg-[var(--text-disabled)]'
-            }`} />
-            {status === 'connected' ? 'Gateway' : 'Offline'}
-          </span>
+          <div className="relative">
+            <button
+              onClick={() => setGatewayPopoverOpen(v => !v)}
+              className={`flex items-center gap-1 cursor-pointer hover:text-[var(--text-secondary)] transition-colors ${
+                status === 'connected' ? 'text-[var(--color-additions)]' : 'text-[var(--text-tertiary)]'
+              }`}
+              title={status === 'connected' ? 'Gateway connected — click to manage' : 'Gateway offline — click to connect'}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                status === 'connected' ? 'bg-[var(--color-additions)] animate-breathe' : 'bg-[var(--text-disabled)]'
+              }`} />
+              {status === 'connected' ? 'Gateway' : 'Offline'}
+              {status !== 'connected' && (
+                <Icon icon="lucide:plug" width={9} height={9} className="text-[var(--warning,#eab308)] animate-pulse" />
+              )}
+            </button>
+            <GatewayConnectPopover open={gatewayPopoverOpen} onClose={() => setGatewayPopoverOpen(false)} />
+          </div>
           <div className="w-px h-3 bg-[var(--border)]" />
           {local.localMode && local.rootPath && (
             <span className="font-mono flex items-center gap-1">
@@ -686,6 +700,8 @@ function EditorLayout() {
               <div className="w-px h-3 bg-[var(--border)]" />
             </>
           )}
+          <SourceModeIndicator />
+          <div className="w-px h-3 bg-[var(--border)]" />
           <button
             onClick={() => setTerminalVisible(v => !v)}
             className={`flex items-center gap-1 cursor-pointer hover:text-[var(--text-secondary)] transition-colors ${terminalVisible ? 'text-[var(--brand)]' : ''

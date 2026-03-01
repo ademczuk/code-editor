@@ -25,6 +25,110 @@ interface ChatMessage {
   editProposals?: EditProposal[]
 }
 
+function AgentConnectPrompt() {
+  const { status, error, connect, gatewayUrl } = useGateway()
+  const [url, setUrl] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+
+  const isConnecting = status === 'connecting' || status === 'authenticating'
+
+  useEffect(() => {
+    try {
+      const savedUrl = localStorage.getItem('code-flow:gateway-url')
+      if (savedUrl && !url) setUrl(savedUrl)
+    } catch {}
+    if (gatewayUrl && !url) setUrl(gatewayUrl)
+  }, [gatewayUrl])
+
+  const handleConnect = () => {
+    if (!url.trim()) return
+    connect(url.trim(), password)
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center text-center py-6 px-4">
+      <div className="relative mb-4">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[color-mix(in_srgb,var(--brand)_20%,transparent)] to-[color-mix(in_srgb,var(--brand)_6%,transparent)] border border-[color-mix(in_srgb,var(--brand)_25%,transparent)] flex items-center justify-center shadow-lg">
+          <Icon icon="lucide:cpu" width={26} height={26} className="text-[var(--brand)]" />
+        </div>
+        <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[var(--sidebar-bg)] ${
+          isConnecting ? 'bg-[var(--warning,#eab308)] animate-pulse' : 'bg-[var(--text-disabled)]'
+        }`} />
+      </div>
+
+      <h3 className="text-[14px] font-semibold text-[var(--text-primary)] mb-1">Connect to Gateway</h3>
+      <p className="text-[11px] text-[var(--text-tertiary)] leading-relaxed mb-4 max-w-[240px]">
+        Your OpenClaw gateway powers the AI agent. Connect to enable completions, chat, and slash commands.
+      </p>
+
+      <div className="w-full max-w-[260px] space-y-2">
+        <input
+          type="text"
+          value={url}
+          onChange={e => setUrl(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') handleConnect() }}
+          placeholder="ws://localhost:4444"
+          className="w-full px-2.5 py-2 rounded-lg bg-[var(--bg)] border border-[var(--border)] text-[11px] font-mono text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] outline-none focus:border-[var(--brand)] transition-colors"
+          disabled={isConnecting}
+        />
+        <div className="relative">
+          <input
+            type={showPassword ? 'text' : 'password'}
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleConnect() }}
+            placeholder="Password (optional)"
+            className="w-full px-2.5 py-2 pr-7 rounded-lg bg-[var(--bg)] border border-[var(--border)] text-[11px] font-mono text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] outline-none focus:border-[var(--brand)] transition-colors"
+            disabled={isConnecting}
+          />
+          <button
+            onClick={() => setShowPassword(v => !v)}
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] cursor-pointer p-0.5"
+            tabIndex={-1}
+          >
+            <Icon icon={showPassword ? 'lucide:eye-off' : 'lucide:eye'} width={11} height={11} />
+          </button>
+        </div>
+        <button
+          onClick={handleConnect}
+          disabled={!url.trim() || isConnecting}
+          className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-medium transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{
+            backgroundColor: 'var(--brand)',
+            color: 'var(--brand-contrast, #fff)',
+          }}
+        >
+          {isConnecting ? (
+            <Icon icon="lucide:loader-2" width={12} height={12} className="animate-spin" />
+          ) : (
+            <Icon icon="lucide:plug" width={12} height={12} />
+          )}
+          {isConnecting ? 'Connecting…' : 'Connect'}
+        </button>
+      </div>
+
+      {status === 'error' && error && (
+        <div className="flex items-start gap-1.5 mt-3 text-[10px] text-[var(--color-deletions)] max-w-[260px] text-left">
+          <Icon icon="lucide:alert-circle" width={11} height={11} className="shrink-0 mt-0.5" />
+          <span className="leading-relaxed">{error}</span>
+        </div>
+      )}
+
+      <div className="mt-5 space-y-1.5 text-[10px] text-[var(--text-disabled)] max-w-[220px]">
+        <div className="flex items-center gap-1.5">
+          <Icon icon="lucide:shield" width={10} height={10} />
+          <span>Runs locally — code never leaves your machine</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Icon icon="lucide:zap" width={10} height={10} />
+          <span>Works with any LLM provider</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function AgentPanel() {
   const { sendRequest, onEvent, status } = useGateway()
   const { files, activeFile, getFile, openFile, updateFileContent } = useEditor()
@@ -488,15 +592,17 @@ export function AgentPanel() {
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-3 min-h-0">
-        {messages.length === 0 && (
+        {messages.length === 0 && !isConnected && (
+          <AgentConnectPrompt />
+        )}
+
+        {messages.length === 0 && isConnected && (
           <div className="flex flex-col items-center justify-center text-center py-8">
             <div className="relative mb-3">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[color-mix(in_srgb,var(--brand)_15%,transparent)] to-[color-mix(in_srgb,var(--brand)_5%,transparent)] border border-[color-mix(in_srgb,var(--brand)_20%,transparent)] flex items-center justify-center">
                 <Icon icon="lucide:sparkles" width={22} height={22} className="text-[var(--brand)] animate-sparkle" />
               </div>
-              <span className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[var(--sidebar-bg)] ${
-                isConnected ? 'bg-[var(--color-additions)]' : 'bg-[var(--text-tertiary)]'
-              }`} />
+              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[var(--sidebar-bg)] bg-[var(--color-additions)]" />
             </div>
             <p className="text-[13px] font-semibold text-[var(--text-primary)]">Coding Agent</p>
             <p className="text-[11px] text-[var(--text-tertiary)] mt-1 max-w-[220px] leading-relaxed">
@@ -519,12 +625,6 @@ export function AgentPanel() {
                 </button>
               ))}
             </div>
-            {!isConnected && (
-              <p className="text-[9px] text-[var(--color-deletions)] mt-3 flex items-center gap-1">
-                <Icon icon="lucide:wifi-off" width={9} height={9} />
-                Connect to gateway for AI features
-              </p>
-            )}
           </div>
         )}
 

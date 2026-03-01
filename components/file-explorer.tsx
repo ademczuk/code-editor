@@ -213,6 +213,8 @@ export function FileExplorer() {
     return buildTree(matches)
   }, [effectiveTree, treeNodes, search])
 
+  const fileCount = useMemo(() => effectiveTree.filter(n => n.type === 'blob').length, [effectiveTree])
+
   if (!repo && !local.localMode) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-[var(--sidebar-bg)]">
@@ -222,8 +224,6 @@ export function FileExplorer() {
       </div>
     )
   }
-
-  const fileCount = useMemo(() => effectiveTree.filter(n => n.type === 'blob').length, [effectiveTree])
 
   return (
     <div className="flex flex-col h-full bg-[var(--sidebar-bg)]">

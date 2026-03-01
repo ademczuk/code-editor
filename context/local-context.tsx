@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react'
 import { isTauri, tauriInvoke } from '@/lib/tauri'
 
 interface FileEntry {
@@ -32,7 +32,7 @@ interface LocalContextValue {
   gitInfo: GitInfo | null
   /** Open a folder via native dialog */
   openFolder: () => Promise<void>
-  /** Set a folder directly (e.g. from recent) */
+  /** Set a folder directly (e.g. from recent — Tauri only) */
   setRootPath: (path: string) => void
   /** Exit local mode */
   exitLocalMode: () => void
@@ -46,8 +46,10 @@ interface LocalContextValue {
   commitFiles: (message: string, paths: string[]) => Promise<string>
   /** Get diff for a file */
   getDiff: (path: string) => Promise<string>
-  /** Available on desktop only */
+  /** Always true — local mode works via Tauri or the browser File System Access API */
   available: boolean
+  /** Whether we're using the web File System Access API (vs Tauri) */
+  isWebFS: boolean
 }
 
 const LocalContext = createContext<LocalContextValue | null>(null)
@@ -69,96 +71,198 @@ export function getRecentFolders(): string[] {
   } catch { return [] }
 }
 
+// ─── Web File System Access API helpers ─────────────────────────
+
+async function webReadTree(dirHandle: FileSystemDirectoryHandle, prefix = ''): Promise<FileEntry[]> {
+  const entries: FileEntry[] = []
+  for await (const [name, handle] of dirHandle as unknown as AsyncIterable<[string, FileSystemHandle]>) {
+    if (name.startsWith('.') || name === 'node_modules') continue
+    const path = prefix ? `${prefix}/${name}` : name
+    if (handle.kind === 'directory') {
+      entries.push({ path, name, is_dir: true })
+      const subEntries = await webReadTree(handle as FileSystemDirectoryHandle, path)
+      entries.push(...subEntries)
+    } else {
+      const file = await (handle as FileSystemFileHandle).getFile()
+      entries.push({ path, name, is_dir: false, size: file.size })
+    }
+  }
+  entries.sort((a, b) => {
+    if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1
+    return a.path.localeCompare(b.path)
+  })
+  return entries
+}
+
+async function webResolveFile(
+  dirHandle: FileSystemDirectoryHandle,
+  filePath: string,
+): Promise<FileSystemFileHandle> {
+  const parts = filePath.split('/')
+  let current: FileSystemDirectoryHandle = dirHandle
+  for (let i = 0; i < parts.length - 1; i++) {
+    current = await current.getDirectoryHandle(parts[i])
+  }
+  return current.getFileHandle(parts[parts.length - 1])
+}
+
+async function webResolveOrCreateFile(
+  dirHandle: FileSystemDirectoryHandle,
+  filePath: string,
+): Promise<FileSystemFileHandle> {
+  const parts = filePath.split('/')
+  let current: FileSystemDirectoryHandle = dirHandle
+  for (let i = 0; i < parts.length - 1; i++) {
+    current = await current.getDirectoryHandle(parts[i], { create: true })
+  }
+  return current.getFileHandle(parts[parts.length - 1], { create: true })
+}
+
+// ─── Provider ───────────────────────────────────────────────────
+
 export function LocalProvider({ children }: { children: ReactNode }) {
   const [localMode, setLocalMode] = useState(false)
   const [rootPath, setRootPathState] = useState<string | null>(null)
   const [localTree, setLocalTree] = useState<FileEntry[]>([])
   const [gitInfo, setGitInfo] = useState<GitInfo | null>(null)
-  const [available, setAvailable] = useState(false)
+  const [desktop, setDesktop] = useState(false)
 
-  // On mount: default to local mode on desktop, restore last folder
+  const webDirHandleRef = useRef<FileSystemDirectoryHandle | null>(null)
+
   useEffect(() => {
-    const desktop = isTauri()
-    setAvailable(desktop)
+    const isDesktop = isTauri()
+    setDesktop(isDesktop)
 
-    if (desktop) {
+    if (isDesktop) {
       const recent = getRecentFolders()
       const lastMode = localStorage.getItem('code-editor:source-mode')
-      // Default to local unless user explicitly chose remote
       if (lastMode !== 'remote' && recent.length > 0) {
         setRootPathState(recent[0])
         setLocalMode(true)
-        loadTree(recent[0])
+        loadTreeTauri(recent[0])
       } else if (lastMode !== 'remote') {
-        // Desktop with no recent folders — still show local mode (empty)
         setLocalMode(true)
       }
     }
   }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadTree = useCallback(async (root: string) => {
+  // ── Tauri tree loader ──
+  const loadTreeTauri = useCallback(async (root: string) => {
     const tree = await tauriInvoke<FileEntry[]>('local_read_tree', { root })
     if (tree) setLocalTree(tree)
     const git = await tauriInvoke<GitInfo>('local_git_info', { root })
     if (git) setGitInfo(git)
   }, [])
 
+  // ── Web tree loader ──
+  const loadTreeWeb = useCallback(async (handle: FileSystemDirectoryHandle) => {
+    const tree = await webReadTree(handle)
+    setLocalTree(tree)
+    setGitInfo(null)
+  }, [])
+
+  // ── setRootPath (Tauri-only: set path by string) ──
   const setRootPath = useCallback((path: string) => {
+    if (!desktop) return
     setRootPathState(path)
     setLocalMode(true)
     saveRecentFolder(path)
     localStorage.setItem('code-editor:source-mode', 'local')
-    loadTree(path)
-  }, [loadTree])
+    loadTreeTauri(path)
+  }, [desktop, loadTreeTauri])
 
+  // ── openFolder ──
   const openFolder = useCallback(async () => {
-    if (!isTauri()) return
-    const { open } = await import('@tauri-apps/plugin-dialog')
-    const selected = await open({ directory: true, multiple: false, title: 'Open Folder' })
-    if (selected && typeof selected === 'string') {
-      setRootPath(selected)
+    if (desktop) {
+      const { open } = await import('@tauri-apps/plugin-dialog')
+      const selected = await open({ directory: true, multiple: false, title: 'Open Folder' })
+      if (selected && typeof selected === 'string') {
+        setRootPath(selected)
+      }
+      return
     }
-  }, [setRootPath])
+
+    if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+      try {
+        const handle = await (window as unknown as { showDirectoryPicker: () => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker()
+        webDirHandleRef.current = handle
+        setRootPathState(handle.name)
+        setLocalMode(true)
+        localStorage.setItem('code-editor:source-mode', 'local')
+        await loadTreeWeb(handle)
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          console.error('Failed to open folder:', err)
+        }
+      }
+    }
+  }, [desktop, setRootPath, loadTreeWeb])
 
   const exitLocalMode = useCallback(() => {
     setLocalMode(false)
     setRootPathState(null)
     setLocalTree([])
     setGitInfo(null)
+    webDirHandleRef.current = null
     localStorage.setItem('code-editor:source-mode', 'remote')
   }, [])
 
   const readFile = useCallback(async (path: string): Promise<string> => {
-    if (!rootPath) throw new Error('No root path')
-    const content = await tauriInvoke<string>('local_read_file', { root: rootPath, path })
-    return content ?? ''
-  }, [rootPath])
+    if (desktop) {
+      if (!rootPath) throw new Error('No root path')
+      const content = await tauriInvoke<string>('local_read_file', { root: rootPath, path })
+      return content ?? ''
+    }
+
+    const handle = webDirHandleRef.current
+    if (!handle) throw new Error('No folder open')
+    const fileHandle = await webResolveFile(handle, path)
+    const file = await fileHandle.getFile()
+    return await file.text()
+  }, [desktop, rootPath])
 
   const writeFile = useCallback(async (path: string, content: string) => {
-    if (!rootPath) throw new Error('No root path')
-    await tauriInvoke('local_write_file', { root: rootPath, path, content })
-  }, [rootPath])
+    if (desktop) {
+      if (!rootPath) throw new Error('No root path')
+      await tauriInvoke('local_write_file', { root: rootPath, path, content })
+      return
+    }
+
+    const handle = webDirHandleRef.current
+    if (!handle) throw new Error('No folder open')
+    const fileHandle = await webResolveOrCreateFile(handle, path)
+    const writable = await fileHandle.createWritable()
+    await writable.write(content)
+    await writable.close()
+  }, [desktop, rootPath])
 
   const refresh = useCallback(async () => {
-    if (rootPath) await loadTree(rootPath)
-  }, [rootPath, loadTree])
+    if (desktop && rootPath) {
+      await loadTreeTauri(rootPath)
+      return
+    }
+    const handle = webDirHandleRef.current
+    if (handle) await loadTreeWeb(handle)
+  }, [desktop, rootPath, loadTreeTauri, loadTreeWeb])
 
   const commitFiles = useCallback(async (message: string, paths: string[]): Promise<string> => {
-    if (!rootPath) throw new Error('No root path')
+    if (!desktop || !rootPath) throw new Error('Git commit requires the desktop app')
     const result = await tauriInvoke<string>('local_git_commit', { root: rootPath, message, paths })
     await refresh()
     return result ?? 'Committed'
-  }, [rootPath, refresh])
+  }, [desktop, rootPath, refresh])
 
   const getDiff = useCallback(async (path: string): Promise<string> => {
-    if (!rootPath) return ''
+    if (!desktop || !rootPath) return ''
     const diff = await tauriInvoke<string>('local_git_diff', { root: rootPath, path })
     return diff ?? ''
-  }, [rootPath])
+  }, [desktop, rootPath])
 
   return (
     <LocalContext.Provider value={{
-      localMode, rootPath, localTree, gitInfo, available,
+      localMode, rootPath, localTree, gitInfo,
+      available: true,
+      isWebFS: !desktop && localMode,
       openFolder, setRootPath, exitLocalMode,
       readFile, writeFile, refresh, commitFiles, getDiff,
     }}>

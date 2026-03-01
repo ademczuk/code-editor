@@ -37,7 +37,6 @@ export function SourceSwitcher() {
           onClick={() => {
             if (local.localMode) return
             if (local.rootPath) {
-              // Re-enter local mode with last folder
               local.setRootPath(local.rootPath)
             } else if (recentFolders.length > 0) {
               local.setRootPath(recentFolders[0])
@@ -45,7 +44,11 @@ export function SourceSwitcher() {
               local.openFolder()
             }
           }}
-          title={local.localMode ? `Local: ${local.rootPath ?? 'no folder'}` : 'Switch to local files'}
+          title={
+            local.localMode
+              ? `Local: ${local.rootPath ?? 'no folder'}`
+              : 'Switch to local files'
+          }
         >
           <Icon icon="lucide:hard-drive" width={12} height={12} />
           Local
@@ -97,8 +100,16 @@ export function SourceSwitcher() {
                 Open Folder…
               </button>
 
-              {/* Recent folders */}
-              {recentFolders.length > 0 && (
+              {/* Web FS hint */}
+              {local.isWebFS && (
+                <div className="px-3 py-1.5 text-[10px] text-[var(--text-tertiary)] border-t border-[var(--border)] flex items-center gap-1.5">
+                  <Icon icon="lucide:globe" width={10} height={10} />
+                  Using browser File System Access
+                </div>
+              )}
+
+              {/* Recent folders (Tauri only — web FS handles are not persistable) */}
+              {!local.isWebFS && recentFolders.length > 0 && (
                 <>
                   <div className="px-3 py-1 text-[10px] text-[var(--text-disabled)] uppercase tracking-wider border-t border-[var(--border)]">
                     Recent
@@ -132,5 +143,44 @@ export function SourceSwitcher() {
         <RepoSelector />
       )}
     </div>
+  )
+}
+
+/** Compact toggle for the status bar */
+export function SourceModeIndicator() {
+  const local = useLocal()
+
+  return (
+    <button
+      onClick={() => {
+        if (local.localMode) {
+          local.exitLocalMode()
+        } else {
+          const recent = getRecentFolders()
+          if (local.rootPath) {
+            local.setRootPath(local.rootPath)
+          } else if (recent.length > 0) {
+            local.setRootPath(recent[0])
+          } else {
+            local.openFolder()
+          }
+        }
+      }}
+      className={`flex items-center gap-1 cursor-pointer hover:text-[var(--text-secondary)] transition-colors ${
+        local.localMode ? 'text-[var(--brand)]' : ''
+      }`}
+      title={
+        local.localMode
+          ? 'Local mode — click to switch to Remote'
+          : 'Remote mode — click to switch to Local'
+      }
+    >
+      <Icon
+        icon={local.localMode ? 'lucide:hard-drive' : 'lucide:github'}
+        width={10}
+        height={10}
+      />
+      <span>{local.localMode ? 'Local' : 'Remote'}</span>
+    </button>
   )
 }
