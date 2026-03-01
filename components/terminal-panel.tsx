@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Icon } from '@iconify/react'
 import { isTauri, tauriInvoke, tauriListen } from '@/lib/tauri'
+import '@xterm/xterm/css/xterm.css'
 
 interface TerminalTab {
   id: number
@@ -20,6 +21,7 @@ export function TerminalPanel({ visible, height, onHeightChange }: TerminalPanel
   const [tabs, setTabs] = useState<TerminalTab[]>([])
   const [activeTab, setActiveTab] = useState<number | null>(null)
   const [isDesktop, setIsDesktop] = useState(false)
+  const [terminalError, setTerminalError] = useState<string | null>(null)
   const termRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<any>(null)     // Terminal instance
   const fitRef = useRef<any>(null)       // FitAddon instance
@@ -34,15 +36,23 @@ export function TerminalPanel({ visible, height, onHeightChange }: TerminalPanel
   const createTerminal = useCallback(async () => {
     if (!isDesktop) return
 
-    const id = await tauriInvoke<number>('create_terminal', {
-      cols: 80,
-      rows: 24,
-    })
-    if (id == null) return
+    try {
+      setTerminalError(null)
+      const id = await tauriInvoke<number>('create_terminal', {
+        cols: 80,
+        rows: 24,
+      })
+      if (id == null) {
+        setTerminalError('Terminal is unavailable outside the desktop runtime.')
+        return
+      }
 
-    const tab: TerminalTab = { id, label: `Terminal ${id}`, alive: true }
-    setTabs(prev => [...prev, tab])
-    setActiveTab(id)
+      const tab: TerminalTab = { id, label: `Terminal ${id}`, alive: true }
+      setTabs(prev => [...prev, tab])
+      setActiveTab(id)
+    } catch (err) {
+      setTerminalError(err instanceof Error ? err.message : 'Failed to create terminal session')
+    }
   }, [isDesktop])
 
   // Initialize xterm.js (once)
@@ -109,15 +119,17 @@ export function TerminalPanel({ visible, height, onHeightChange }: TerminalPanel
         }
       })
 
-      // Auto-create first terminal
-      if (tabs.length === 0 && isDesktop) {
-        createTerminal()
-      }
     })()
 
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible])
+
+  // Ensure first terminal exists when panel opens in desktop mode.
+  useEffect(() => {
+    if (!visible || !isDesktop || tabs.length > 0) return
+    void createTerminal()
+  }, [visible, isDesktop, tabs.length, createTerminal])
 
   // Ref for activeTab (used inside xterm onData callback)
   const activeTabRef = useRef(activeTab)
@@ -271,7 +283,14 @@ export function TerminalPanel({ visible, height, onHeightChange }: TerminalPanel
       {/* Terminal viewport */}
       <div className="flex-1 overflow-hidden bg-[var(--bg)]">
         {isDesktop ? (
-          <div ref={termRef} className="w-full h-full p-2" />
+          <div className="w-full h-full p-2 relative">
+            <div ref={termRef} className="w-full h-full" />
+            {terminalError && (
+              <div className="absolute right-2 top-2 max-w-[70%] rounded border border-[color-mix(in_srgb,var(--color-deletions)_35%,transparent)] bg-[color-mix(in_srgb,var(--color-deletions)_10%,transparent)] px-2 py-1 text-[11px] text-[var(--color-deletions)]">
+                {terminalError}
+              </div>
+            )}
+          </div>
         ) : (
           <div className="flex items-center justify-center h-full text-[var(--text-secondary)] text-sm">
             <div className="text-center space-y-2">
