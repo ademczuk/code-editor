@@ -40,9 +40,6 @@
       "icons/icon.ico"
     ]
   },
-  "plugins": {
-    "window-state": {
-      "autoSave": true
-    }
-  }
+  "plugins": {}
+  
 }
