@@ -45,8 +45,10 @@ export function ChatHome({ onSend, onSelectFolder, onCloneRepo }: Props) {
   const hasWorkspace = !!repoShort
   const recentFolders = getRecentFolders()
 
+  const isTyping = isFocused && !!input.trim()
+
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current || !isFocused) return
+    if (!cardRef.current || !isFocused || isTyping) return
     cancelAnimationFrame(rafRef.current)
     rafRef.current = requestAnimationFrame(() => {
       const card = cardRef.current
@@ -59,13 +61,20 @@ export function ChatHome({ onSend, onSelectFolder, onCloneRepo }: Props) {
       card.style.setProperty('--rx', `${rotateX}deg`)
       card.style.setProperty('--ry', `${rotateY}deg`)
     })
-  }, [isFocused])
+  }, [isFocused, isTyping])
 
   const handleMouseLeave = useCallback(() => {
     if (!cardRef.current) return
     cardRef.current.style.setProperty('--rx', '0deg')
     cardRef.current.style.setProperty('--ry', '0deg')
   }, [])
+
+  useEffect(() => {
+    if (isTyping && cardRef.current) {
+      cardRef.current.style.setProperty('--rx', '0deg')
+      cardRef.current.style.setProperty('--ry', '0deg')
+    }
+  }, [isTyping])
 
   useEffect(() => {
     const t = setTimeout(() => inputRef.current?.focus(), 100)
@@ -118,7 +127,11 @@ export function ChatHome({ onSend, onSelectFolder, onCloneRepo }: Props) {
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
           className={`chat-input-3d rounded-xl border bg-[var(--bg-elevated)] overflow-hidden mb-4 ${
-            isFocused ? 'chat-input-3d-active border-[color-mix(in_srgb,var(--brand)_40%,var(--border))]' : 'border-[var(--border)]'
+            isFocused
+              ? input.trim()
+                ? 'chat-input-3d-typing border-[color-mix(in_srgb,var(--brand)_40%,var(--border))]'
+                : 'chat-input-3d-active border-[color-mix(in_srgb,var(--brand)_40%,var(--border))]'
+              : 'border-[var(--border)]'
           }`}
           style={{ '--rx': '0deg', '--ry': '0deg' } as React.CSSProperties}
         >

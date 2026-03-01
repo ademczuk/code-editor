@@ -162,7 +162,7 @@ export function PlanView({ steps, onApprove, onSkip, onStepToggle, interactive =
           </button>
           <button
             onClick={onApprove}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[10px] font-semibold bg-[var(--brand)] text-white hover:opacity-90 transition-opacity cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[10px] font-semibold bg-[var(--brand)] text-[var(--brand-contrast)] hover:opacity-90 transition-opacity cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
           >
             <Icon icon="lucide:play" width={11} height={11} />
             Continue

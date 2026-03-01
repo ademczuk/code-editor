@@ -42,12 +42,13 @@ interface Props {
   activeId: string
   onSelect: (id: string) => void
   onNew: () => void
+  onDelete?: (id: string) => void
   collapsed?: boolean
   onToggle?: () => void
   repoName?: string
 }
 
-export function WorkspaceSidebar({ activeId, onSelect, onNew, collapsed, onToggle, repoName }: Props) {
+export function WorkspaceSidebar({ activeId, onSelect, onNew, onDelete, collapsed, onToggle, repoName }: Props) {
   const [isTauriDesktop, setIsTauriDesktop] = useState(false)
   useEffect(() => { setIsTauriDesktop(isTauri()) }, [])
 
@@ -129,7 +130,8 @@ export function WorkspaceSidebar({ activeId, onSelect, onNew, collapsed, onToggl
       saveSessions(next)
       return next
     })
-  }, [])
+    onDelete?.(id)
+  }, [onDelete])
 
   const pinned = sessions.filter(s => s.pinned)
   const recent = sessions.filter(s => !s.pinned)
@@ -154,7 +156,7 @@ export function WorkspaceSidebar({ activeId, onSelect, onNew, collapsed, onToggl
               onClick={() => onSelect(s.id)}
               className={`w-7 h-7 rounded-md flex items-center justify-center text-[10px] font-bold transition-all cursor-pointer ${
                 activeId === s.id
-                  ? 'bg-[var(--brand)] text-white'
+                  ? 'bg-[var(--brand)] text-[var(--brand-contrast)]'
                   : 'bg-[var(--bg-subtle)] text-[var(--text-tertiary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-secondary)]'
               }`}
               title={s.title}
@@ -243,7 +245,7 @@ export function WorkspaceSidebar({ activeId, onSelect, onNew, collapsed, onToggl
               className="w-full pl-8 pr-2.5 py-1.5 text-[12px] rounded-md bg-[var(--bg)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] outline-none focus:border-[color-mix(in_srgb,var(--brand)_50%,var(--border))] transition-colors"
             />
           </div>
-          <button onClick={onNew} className="p-2 rounded-md bg-[var(--brand)] text-white hover:opacity-90 transition-opacity cursor-pointer shadow-sm" title="New Chat">
+          <button onClick={onNew} className="p-2 rounded-md bg-[var(--brand)] text-[var(--brand-contrast)] hover:opacity-90 transition-opacity cursor-pointer shadow-sm" title="New Chat">
             <Icon icon="lucide:plus" width={14} height={14} />
           </button>
         </div>
@@ -295,9 +297,9 @@ export function WorkspaceSidebar({ activeId, onSelect, onNew, collapsed, onToggl
       <div className="flex items-center justify-between px-2 py-1.5 border-t border-[var(--border)] shrink-0">
         <div className="flex items-center gap-0.5">
           <button
-            onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: '`', metaKey: true }))}
+            onClick={() => window.dispatchEvent(new CustomEvent('toggle-terminal'))}
             className="w-[30px] h-[30px] flex items-center justify-center rounded-[var(--radius-sm)] hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] transition-colors cursor-pointer"
-            title="Terminal"
+            title="Terminal (⌘J)"
           >
             <Icon icon="lucide:terminal" width={15} height={15} />
           </button>

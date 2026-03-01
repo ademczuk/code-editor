@@ -256,7 +256,7 @@ export function ThemeStudio({ open, onClose }: ThemeStudioProps) {
                 <button
                   onClick={handleImport}
                   disabled={!importText.trim()}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-medium transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed bg-[var(--brand)] text-white hover:opacity-90"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-medium transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed bg-[var(--brand)] text-[var(--brand-contrast)] hover:opacity-90"
                 >
                   <Icon icon="lucide:play" width={12} height={12} />
                   Preview
@@ -283,7 +283,7 @@ export function ThemeStudio({ open, onClose }: ThemeStudioProps) {
                     />
                     <button
                       onClick={handleSaveCustom}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-[var(--brand)] text-white hover:opacity-90 transition-all cursor-pointer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-[var(--brand)] text-[var(--brand-contrast)] hover:opacity-90 transition-all cursor-pointer"
                     >
                       <Icon icon="lucide:save" width={12} height={12} />
                       Save
@@ -360,7 +360,7 @@ export function ThemeStudio({ open, onClose }: ThemeStudioProps) {
                     </div>
                     <button
                       onClick={() => handleApplyCustom(theme)}
-                      className="px-2.5 py-1 rounded-md text-[10px] font-medium bg-[var(--brand)] text-white hover:opacity-90 transition-all cursor-pointer"
+                      className="px-2.5 py-1 rounded-md text-[10px] font-medium bg-[var(--brand)] text-[var(--brand-contrast)] hover:opacity-90 transition-all cursor-pointer"
                     >
                       Apply
                     </button>

@@ -3,16 +3,23 @@
 import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { useTheme, THEME_PRESETS } from '@/context/theme-context'
+import { usePlugins } from '@/context/plugin-context'
+import { useGitHubAuth } from '@/context/github-auth-context'
 
 interface Props {
   open: boolean
   onClose: () => void
 }
 
-type SettingsTab = 'general' | 'editor' | 'agent' | 'keybindings'
+type SettingsTab = 'general' | 'editor' | 'agent' | 'keybindings' | 'plugins'
 
 export function SettingsPanel({ open, onClose }: Props) {
   const { themeId, setThemeId, mode, setMode } = useTheme()
+  const { slots } = usePlugins()
+  const { token: ghToken, source: ghSource, authenticated: ghAuthenticated, setManualToken: setGhToken, clearToken: clearGhToken, oauthAvailable, oauthStep, startOAuth, cancelOAuth, loading: ghLoading } = useGitHubAuth()
+  const [ghTokenDraft, setGhTokenDraft] = useState('')
+  const [ghTokenRevealed, setGhTokenRevealed] = useState(false)
+  const [showGhTokenInput, setShowGhTokenInput] = useState(false)
   const [tab, setTab] = useState<SettingsTab>('general')
   const [fontSize, setFontSize] = useState(13)
   const [tabSize, setTabSize] = useState(2)
@@ -51,6 +58,7 @@ export function SettingsPanel({ open, onClose }: Props) {
     { id: 'editor', label: 'Editor', icon: 'lucide:code-2' },
     { id: 'agent', label: 'Agent', icon: 'lucide:bot' },
     { id: 'keybindings', label: 'Keys', icon: 'lucide:keyboard' },
+    { id: 'plugins', label: 'Plugins', icon: 'lucide:puzzle' },
   ]
 
   const shortcuts = [
@@ -126,7 +134,7 @@ export function SettingsPanel({ open, onClose }: Props) {
                       key={m}
                       onClick={() => setMode(m)}
                       className={`px-2.5 py-1 rounded-md text-[10px] font-medium transition-all cursor-pointer ${
-                        mode === m ? 'bg-[var(--brand)] text-white' : 'bg-[var(--bg)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
+                        mode === m ? 'bg-[var(--brand)] text-[var(--brand-contrast)]' : 'bg-[var(--bg)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
                       }`}
                     >
                       {m === 'dark' ? 'Dark' : 'Light'}
@@ -138,6 +146,149 @@ export function SettingsPanel({ open, onClose }: Props) {
               {/* Auto Save */}
               <Section title="Auto Save">
                 <Toggle checked={autoSave} onChange={setAutoSave} label="Save files automatically" />
+              </Section>
+
+              {/* GitHub Connection */}
+              <Section title="GitHub Connection">
+                {ghLoading ? (
+                  <div className="flex items-center gap-2 py-2">
+                    <Icon icon="lucide:loader-2" width={14} height={14} className="text-[var(--text-disabled)] animate-spin" />
+                    <span className="text-[11px] text-[var(--text-tertiary)]">Checking token…</span>
+                  </div>
+                ) : ghAuthenticated ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg)]">
+                      <Icon icon="lucide:check-circle" width={14} height={14} className="text-[var(--success)] shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-[11px] text-[var(--text-secondary)] font-mono truncate block">
+                          {ghTokenRevealed ? ghToken : `${ghToken.slice(0, 4)}${'•'.repeat(Math.min(ghToken.length - 8, 20))}${ghToken.slice(-4)}`}
+                        </span>
+                        <span className="text-[9px] text-[var(--text-disabled)] uppercase tracking-wider">
+                          Source: {ghSource}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setGhTokenRevealed(v => !v)}
+                        className="p-1 rounded hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] transition-colors cursor-pointer"
+                        title={ghTokenRevealed ? 'Hide' : 'Reveal'}
+                      >
+                        <Icon icon={ghTokenRevealed ? 'lucide:eye-off' : 'lucide:eye'} width={12} height={12} />
+                      </button>
+                      <button
+                        onClick={() => { clearGhToken(); setGhTokenRevealed(false) }}
+                        className="p-1 rounded hover:bg-[color-mix(in_srgb,var(--error)_10%,transparent)] text-[var(--text-disabled)] hover:text-[var(--error)] transition-colors cursor-pointer"
+                        title="Remove token"
+                      >
+                        <Icon icon="lucide:x" width={12} height={12} />
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-[var(--text-disabled)]">Token stored locally. Never sent to external servers.</p>
+                  </div>
+                ) : oauthStep.type === 'device-pending' ? (
+                  <div className="space-y-2 px-3 py-3 rounded-lg border border-[color-mix(in_srgb,var(--brand)_30%,var(--border))] bg-[color-mix(in_srgb,var(--brand)_4%,var(--bg))]">
+                    <div className="flex items-center gap-2">
+                      <Icon icon="lucide:loader-2" width={14} height={14} className="text-[var(--brand)] animate-spin" />
+                      <span className="text-[11px] text-[var(--text-primary)] font-medium">Waiting for authorization…</span>
+                    </div>
+                    <p className="text-[10px] text-[var(--text-secondary)]">
+                      Enter code <span className="font-mono font-bold text-[var(--brand)]">{oauthStep.userCode}</span> at GitHub
+                    </p>
+                    <div className="flex gap-2">
+                      <a
+                        href={oauthStep.verificationUriComplete}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-medium bg-[var(--brand)] text-[var(--brand-contrast)] hover:opacity-90 transition-opacity cursor-pointer"
+                      >
+                        <Icon icon="lucide:external-link" width={10} height={10} />
+                        Open GitHub
+                      </a>
+                      <button
+                        onClick={cancelOAuth}
+                        className="px-2.5 py-1 rounded-md text-[10px] font-medium border border-[var(--border)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : oauthStep.type === 'error' ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[color-mix(in_srgb,var(--error)_30%,var(--border))] bg-[color-mix(in_srgb,var(--error)_4%,var(--bg))]">
+                      <Icon icon="lucide:alert-circle" width={14} height={14} className="text-[var(--error)] shrink-0" />
+                      <span className="text-[11px] text-[var(--error)]">{oauthStep.message}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      {oauthAvailable && (
+                        <button onClick={startOAuth} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-medium bg-[var(--bg-subtle)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--text-disabled)] transition-all cursor-pointer">
+                          <Icon icon="lucide:rotate-cw" width={10} height={10} />
+                          Try Again
+                        </button>
+                      )}
+                      <button onClick={() => setShowGhTokenInput(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-medium text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors cursor-pointer">
+                        <Icon icon="lucide:key" width={10} height={10} />
+                        Enter Token Manually
+                      </button>
+                    </div>
+                  </div>
+                ) : showGhTokenInput ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex-1 flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1.5 focus-within:border-[var(--border-focus)] transition-colors">
+                        <Icon icon="lucide:key" width={12} height={12} className="text-[var(--text-disabled)] shrink-0" />
+                        <input
+                          type={ghTokenRevealed ? 'text' : 'password'}
+                          value={ghTokenDraft}
+                          onChange={e => setGhTokenDraft(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && ghTokenDraft.trim()) { setGhToken(ghTokenDraft.trim()); setGhTokenDraft(''); setShowGhTokenInput(false); setGhTokenRevealed(false) }
+                            if (e.key === 'Escape') { setShowGhTokenInput(false); setGhTokenDraft(''); setGhTokenRevealed(false) }
+                          }}
+                          placeholder="ghp_... or github_pat_..."
+                          autoFocus
+                          className="flex-1 bg-transparent text-[11px] font-mono text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] outline-none min-w-0"
+                          autoComplete="off"
+                          spellCheck={false}
+                        />
+                        <button onClick={() => setGhTokenRevealed(v => !v)} className="p-0.5 rounded hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] transition-colors cursor-pointer">
+                          <Icon icon={ghTokenRevealed ? 'lucide:eye-off' : 'lucide:eye'} width={11} height={11} />
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => { if (ghTokenDraft.trim()) { setGhToken(ghTokenDraft.trim()); setGhTokenDraft(''); setShowGhTokenInput(false); setGhTokenRevealed(false) } }}
+                        disabled={!ghTokenDraft.trim()}
+                        className={`px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-colors cursor-pointer ${ghTokenDraft.trim() ? 'bg-[var(--brand)] text-[var(--brand-contrast)] hover:opacity-90' : 'bg-[var(--bg-subtle)] text-[var(--text-disabled)] cursor-not-allowed'}`}
+                      >
+                        Save
+                      </button>
+                      <button onClick={() => { setShowGhTokenInput(false); setGhTokenDraft(''); setGhTokenRevealed(false) }} className="p-1 rounded hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] transition-colors cursor-pointer">
+                        <Icon icon="lucide:x" width={12} height={12} />
+                      </button>
+                    </div>
+                    <p className="text-[9px] text-[var(--text-disabled)]">Generate at github.com/settings/tokens — needs repo scope for private repos</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      {oauthAvailable && (
+                        <button
+                          onClick={startOAuth}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-medium bg-[var(--bg-subtle)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--text-disabled)] transition-all cursor-pointer"
+                        >
+                          <Icon icon="simple-icons:github" width={14} height={14} />
+                          Sign in with GitHub
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setShowGhTokenInput(true)}
+                        className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-medium border border-dashed border-[var(--border)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:border-[var(--text-disabled)] transition-all cursor-pointer ${oauthAvailable ? '' : 'flex-1'}`}
+                      >
+                        <Icon icon="lucide:key" width={12} height={12} />
+                        {oauthAvailable ? 'Use Token' : 'Add GitHub Token'}
+                      </button>
+                    </div>
+                    <p className="text-[9px] text-[var(--text-disabled)]">Required for cloning private repos and API access. Token never leaves your browser.</p>
+                  </div>
+                )}
               </Section>
             </>
           )}
@@ -176,6 +327,29 @@ export function SettingsPanel({ open, onClose }: Props) {
                 </div>
               ))}
             </div>
+          )}
+
+          {tab === 'plugins' && (
+            <>
+              {slots.settings.length > 0 ? (
+                <div className="space-y-4">
+                  {slots.settings.map(entry => {
+                    const Comp = entry.component
+                    return (
+                      <div key={entry.id} className="p-3 rounded-xl border border-[var(--border)] bg-[var(--bg)]">
+                        <Comp />
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Icon icon="lucide:puzzle" width={28} height={28} className="mx-auto mb-2 text-[var(--text-disabled)]" />
+                  <p className="text-[11px] text-[var(--text-tertiary)]">No plugins installed</p>
+                  <p className="text-[10px] text-[var(--text-disabled)] mt-1">Plugins can register settings, floating widgets, and status bar entries</p>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

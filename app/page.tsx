@@ -11,6 +11,8 @@ import { useView, type ViewId } from '@/context/view-context'
 import { WorkspaceSidebar } from '@/components/workspace-sidebar'
 import { isTauri } from '@/lib/tauri'
 import { fetchFileContentsByName as fetchFileContents, commitFilesByName as commitFiles } from '@/lib/github-api'
+import { PluginSlotRenderer } from '@/context/plugin-context'
+import { SpotifyPlugin } from '@/components/plugins/spotify/spotify-plugin'
 
 // View components — lazy loaded
 const ChatView = dynamic(() => import('@/components/views/chat-view').then(m => ({ default: m.ChatView })), { ssr: false })
@@ -25,6 +27,7 @@ const GlobalSearch = dynamic(() => import('@/components/global-search').then(m =
 const CommandPalette = dynamic(() => import('@/components/command-palette').then(m => ({ default: m.CommandPalette })), { ssr: false })
 const ShortcutsOverlay = dynamic(() => import('@/components/shortcuts-overlay').then(m => ({ default: m.ShortcutsOverlay })), { ssr: false })
 const Landing = dynamic(() => import('@/components/landing'), { ssr: false })
+const TerminalPanel = dynamic(() => import('@/components/terminal-panel').then(m => ({ default: m.TerminalPanel })), { ssr: false })
 
 const VIEW_ICONS: Record<ViewId, { icon: string; label: string }> = {
   chat: { icon: 'lucide:message-square', label: 'Chat' },
@@ -57,6 +60,10 @@ export default function EditorLayout() {
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
   const tabContainerRef = useRef<HTMLDivElement>(null)
   const [indicatorStyle, setIndicatorStyle] = useState<{ left: number; width: number }>({ left: 0, width: 0 })
+
+  // Terminal
+  const [terminalVisible, setTerminalVisible] = useState(false)
+  const [terminalHeight, setTerminalHeight] = useState(240)
 
   // Overlay modals
   const [quickOpenVisible, setQuickOpenVisible] = useState(false)
@@ -114,6 +121,8 @@ export default function EditorLayout() {
       if (meta && e.shiftKey && e.key === 'f') { e.preventDefault(); setGlobalSearchVisible(v => !v) }
       // ⌘\\ — Toggle sidebar
       if (meta && e.key === '\\') { e.preventDefault(); setSidebarCollapsed(v => !v) }
+      // ⌘J / ⌘` — Toggle terminal
+      if (meta && (e.key === 'j' || e.key === '`') && !e.shiftKey) { e.preventDefault(); setTerminalVisible(v => !v) }
       // Esc — Close overlays
       if (e.key === 'Escape') {
         setQuickOpenVisible(false); setGlobalSearchVisible(false)
@@ -137,11 +146,14 @@ export default function EditorLayout() {
   useEffect(() => {
     const openSettings = () => setSettingsVisible(true)
     const openFolder = () => { /* Handled by local context */ }
+    const toggleTerminal = () => setTerminalVisible(v => !v)
     window.addEventListener('open-settings', openSettings)
     window.addEventListener('open-folder', openFolder)
+    window.addEventListener('toggle-terminal', toggleTerminal)
     return () => {
       window.removeEventListener('open-settings', openSettings)
       window.removeEventListener('open-folder', openFolder)
+      window.removeEventListener('toggle-terminal', toggleTerminal)
     }
   }, [])
 
@@ -285,6 +297,7 @@ export default function EditorLayout() {
         activeId={activeChatId ?? ''}
         onSelect={(id) => { setActiveChatId(id); window.dispatchEvent(new CustomEvent('switch-chat', { detail: { id } })); setView('chat') }}
         onNew={() => { const newId = crypto.randomUUID(); setActiveChatId(newId); window.dispatchEvent(new CustomEvent('switch-chat', { detail: { id: newId } })); setView('chat') }}
+        onDelete={(id) => { if (id === activeChatId) { const newId = crypto.randomUUID(); setActiveChatId(newId); window.dispatchEvent(new CustomEvent('switch-chat', { detail: { id: newId } })); } }}
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(v => !v)}
         repoName={repo?.fullName || localRootPath?.split('/').pop()}
@@ -349,6 +362,27 @@ export default function EditorLayout() {
           </div>
         </div>
 
+        {/* Terminal — global, works from any view */}
+        {terminalVisible && (
+          <>
+            <div
+              className="h-[3px] cursor-row-resize hover:bg-[var(--brand)] transition-colors opacity-0 hover:opacity-50 shrink-0"
+              onMouseDown={e => {
+                e.preventDefault()
+                const startY = e.clientY
+                const startH = terminalHeight
+                const onMove = (ev: MouseEvent) => setTerminalHeight(Math.max(100, Math.min(500, startH - (ev.clientY - startY))))
+                const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp) }
+                document.addEventListener('mousemove', onMove)
+                document.addEventListener('mouseup', onUp)
+              }}
+            />
+            <div className="shrink-0 border-t border-[var(--border)]" style={{ height: terminalHeight }}>
+              <TerminalPanel visible={terminalVisible} height={terminalHeight} onHeightChange={setTerminalHeight} />
+            </div>
+          </>
+        )}
+
         {/* Status bar */}
         <footer className="flex items-center justify-between px-3 h-[22px] border-t border-[var(--border)] bg-[var(--bg-elevated)] text-[10px] text-[var(--text-tertiary)] shrink-0">
           <div className="flex items-center gap-3">
@@ -372,6 +406,7 @@ export default function EditorLayout() {
             )}
           </div>
           <div className="flex items-center gap-3">
+            <PluginSlotRenderer slot="status-bar-right" />
             <span className="text-[var(--text-disabled)] font-medium">Knot Code</span>
             <span
               className={`w-2 h-2 rounded-full transition-all duration-300 ${
@@ -386,6 +421,10 @@ export default function EditorLayout() {
           </div>
         </footer>
       </div>
+
+      {/* Plugins */}
+      <SpotifyPlugin />
+      <PluginSlotRenderer slot="floating" />
 
       {/* Modal overlays */}
       <QuickOpen

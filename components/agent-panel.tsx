@@ -1368,7 +1368,7 @@ export function AgentPanel() {
               disabled={!input.trim() || sending}
               className={`p-1.5 rounded-md transition-all cursor-pointer ${
                 input.trim() && !sending
-                  ? 'bg-[var(--brand)] text-white hover:opacity-90'
+                  ? 'bg-[var(--brand)] text-[var(--brand-contrast)] hover:opacity-90'
                   : 'text-[var(--text-disabled)] cursor-not-allowed'
               }`}
               title="Send (Enter)"

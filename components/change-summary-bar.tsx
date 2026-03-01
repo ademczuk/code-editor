@@ -108,7 +108,7 @@ export function ChangeSummaryBar({ onReview }: Props) {
           <>
             <button
               onClick={onReview}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-semibold bg-[var(--brand)] text-white hover:opacity-90 transition-opacity cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-semibold bg-[var(--brand)] text-[var(--brand-contrast)] hover:opacity-90 transition-opacity cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
             >
               <Icon icon="lucide:eye" width={11} height={11} />
               Review

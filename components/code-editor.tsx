@@ -44,7 +44,7 @@ function WelcomeView() {
               { icon: 'lucide:folder-open', label: 'Open Folder', hint: '⌘O', action: () => window.dispatchEvent(new CustomEvent('open-folder')) },
               { icon: 'lucide:file-plus', label: 'New File', hint: '⌘N', action: () => window.dispatchEvent(new CustomEvent('file-select', { detail: { path: 'untitled', sha: '' } })) },
               { icon: 'lucide:search', label: 'Quick Open', hint: '⌘P', action: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', metaKey: true })) },
-              { icon: 'lucide:terminal', label: 'Open Terminal', hint: '⌘\`', action: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: '\`', metaKey: true })) },
+              { icon: 'lucide:terminal', label: 'Open Terminal', hint: '⌘\`', action: () => window.dispatchEvent(new CustomEvent('toggle-terminal')) },
             ].map(item => (
               <button
                 key={item.label}

@@ -276,7 +276,7 @@ export function GitPanel({ open, onClose }: Props) {
                         <button
                           onClick={handleCreateBranch}
                           disabled={!newBranchName.trim() || creatingBranch}
-                          className="px-2 py-1 text-[9px] font-medium rounded bg-[var(--brand)] text-white hover:opacity-90 disabled:opacity-40 cursor-pointer"
+                          className="px-2 py-1 text-[9px] font-medium rounded bg-[var(--brand)] text-[var(--brand-contrast)] hover:opacity-90 disabled:opacity-40 cursor-pointer"
                         >
                           {creatingBranch ? '...' : 'Create'}
                         </button>
@@ -306,7 +306,7 @@ export function GitPanel({ open, onClose }: Props) {
                 }`}
               >
                 {t === 'changes' ? (
-                  <><Icon icon="lucide:file-diff" width={10} height={10} />Changes{dirtyFiles.length > 0 && <span className="ml-1 px-1 rounded-full bg-[var(--brand)] text-white text-[8px]">{dirtyFiles.length}</span>}</>
+                  <><Icon icon="lucide:file-diff" width={10} height={10} />Changes{dirtyFiles.length > 0 && <span className="ml-1 px-1 rounded-full bg-[var(--brand)] text-[var(--brand-contrast)] text-[8px]">{dirtyFiles.length}</span>}</>
                 ) : (
                   <><Icon icon="lucide:history" width={10} height={10} />History</>
                 )}
@@ -410,7 +410,7 @@ export function GitPanel({ open, onClose }: Props) {
                   disabled={!commitMsg.trim() || selectedFiles.size === 0 || committing}
                   className={`w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
                     commitMsg.trim() && selectedFiles.size > 0 && !committing
-                      ? 'bg-[var(--brand)] text-white hover:opacity-90 shadow-sm'
+                      ? 'bg-[var(--brand)] text-[var(--brand-contrast)] hover:opacity-90 shadow-sm'
                       : 'bg-[var(--bg-subtle)] text-[var(--text-disabled)] cursor-not-allowed'
                   }`}
                   title={!commitMsg.trim() ? 'Enter a commit message' : selectedFiles.size === 0 ? 'Select files to commit' : ''}

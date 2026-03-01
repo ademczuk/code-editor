@@ -12,7 +12,6 @@ import { SourceSwitcher } from '@/components/source-switcher'
 
 const FileExplorer = dynamic(() => import('@/components/file-explorer').then(m => ({ default: m.FileExplorer })), { ssr: false })
 const CodeEditor = dynamic(() => import('@/components/code-editor').then(m => ({ default: m.CodeEditor })), { ssr: false })
-const TerminalPanel = dynamic(() => import('@/components/terminal-panel').then(m => ({ default: m.TerminalPanel })), { ssr: false })
 const EnginePanel = dynamic(() => import('@/components/engine-panel').then(m => ({ default: m.EnginePanel })), { ssr: false })
 
 export function EditorView() {
@@ -25,19 +24,15 @@ export function EditorView() {
   const [treeWidth, setTreeWidth] = useState(() => {
     try { const s = parseInt(localStorage.getItem('ce:tree-w') || ''); return s >= 160 && s <= 400 ? s : 220 } catch { return 220 }
   })
-  const [terminalVisible, setTerminalVisible] = useState(false)
-  const [terminalHeight, setTerminalHeight] = useState(240)
   const [engineVisible, setEngineVisible] = useState(false)
 
   // Persist tree width
   useEffect(() => { try { localStorage.setItem('ce:tree-w', String(treeWidth)) } catch {} }, [treeWidth])
 
-  // ⌘B toggle tree, ⌘J toggle terminal
+  // ⌘B toggle tree
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'b') { e.preventDefault(); setTreeVisible(v => !v) }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'j') { e.preventDefault(); setTerminalVisible(v => !v) }
-      if ((e.metaKey || e.ctrlKey) && e.key === '`') { e.preventDefault(); setTerminalVisible(v => !v) }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -92,30 +87,21 @@ export function EditorView() {
               <CodeEditor />
             </div>
 
-            {/* Terminal / Engine resize handle */}
-            {(terminalVisible || engineVisible) && (
-              <div className="h-[3px] cursor-row-resize hover:bg-[var(--brand)] transition-colors opacity-0 hover:opacity-50 shrink-0"
-                onMouseDown={e => {
-                  e.preventDefault(); const startY = e.clientY; const startH = terminalHeight
-                  const onMove = (ev: MouseEvent) => setTerminalHeight(Math.max(100, Math.min(500, startH - (ev.clientY - startY))))
-                  const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp) }
-                  document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp)
-                }}
-              />
-            )}
-
-            {/* Terminal */}
-            {terminalVisible && (
-              <div className="shrink-0 border-t border-[var(--border)]" style={{ height: terminalHeight }}>
-                <TerminalPanel visible={terminalVisible} height={terminalHeight} onHeightChange={setTerminalHeight} />
-              </div>
-            )}
-
-            {/* Engine (mutually exclusive with terminal) */}
-            {engineVisible && !terminalVisible && (
-              <div className="shrink-0 border-t border-[var(--border)]" style={{ height: terminalHeight }}>
-                <EnginePanel />
-              </div>
+            {/* Engine panel */}
+            {engineVisible && (
+              <>
+                <div className="h-[3px] cursor-row-resize hover:bg-[var(--brand)] transition-colors opacity-0 hover:opacity-50 shrink-0"
+                  onMouseDown={e => {
+                    e.preventDefault(); const startY = e.clientY; const startH = 240
+                    const onMove = (ev: MouseEvent) => { /* engine resize handled locally */ }
+                    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp) }
+                    document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp)
+                  }}
+                />
+                <div className="shrink-0 border-t border-[var(--border)]" style={{ height: 240 }}>
+                  <EnginePanel />
+                </div>
+              </>
             )}
           </>
         ) : (
@@ -142,7 +128,7 @@ export function EditorView() {
           <button onClick={() => setTreeVisible(v => !v)} className={`p-0.5 rounded hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] cursor-pointer ${treeVisible ? 'text-[var(--text-secondary)]' : 'text-[var(--text-disabled)]'}`} title="Explorer (⌘B)">
             <Icon icon="lucide:folder" width={11} height={11} />
           </button>
-          <button onClick={() => setTerminalVisible(v => !v)} className={`p-0.5 rounded hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] cursor-pointer ${terminalVisible ? 'text-[var(--text-secondary)]' : 'text-[var(--text-disabled)]'}`} title="Terminal (⌘J)">
+          <button onClick={() => window.dispatchEvent(new CustomEvent('toggle-terminal'))} className="p-0.5 rounded hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] cursor-pointer text-[var(--text-disabled)]" title="Terminal (⌘J)">
             <Icon icon="lucide:terminal" width={11} height={11} />
           </button>
           <button onClick={() => setEngineVisible(v => !v)} className={`p-0.5 rounded hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] cursor-pointer ${engineVisible ? 'text-[var(--text-secondary)]' : 'text-[var(--text-disabled)]'}`} title="Engine">

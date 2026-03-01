@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Icon } from '@iconify/react'
 import { useRepo, type TreeNode } from '@/context/repo-context'
+import { useLocal } from '@/context/local-context'
 
 /**
  * ⌘P Quick File Open — fuzzy search across entire repo tree.
@@ -74,6 +75,7 @@ function HighlightedText({ text, indices }: { text: string; indices: number[] })
 
 export function QuickOpen({ open, onClose, onSelect }: QuickOpenProps) {
   const { tree } = useRepo()
+  const { localTree, localMode } = useLocal()
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -88,8 +90,17 @@ export function QuickOpen({ open, onClose, onSelect }: QuickOpenProps) {
     }
   }, [open])
 
-  // Files only (no directories)
-  const files = useMemo(() => tree.filter(n => n.type === 'blob'), [tree])
+  // Files from both GitHub tree and local filesystem
+  const files = useMemo(() => {
+    if (localMode && localTree.length > 0) {
+      // Local mode: use local filesystem entries
+      return localTree
+        .filter(f => !f.is_dir)
+        .map(f => ({ path: f.path, sha: '', type: 'blob' as const }))
+    }
+    // GitHub mode: use repo tree
+    return tree.filter(n => n.type === 'blob')
+  }, [tree, localTree, localMode])
 
   // Fuzzy filtered results
   const results = useMemo(() => {

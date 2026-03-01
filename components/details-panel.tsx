@@ -179,7 +179,7 @@ export function DetailsPanel() {
             {/* Terminal */}
             <Section id="terminal" icon="lucide:terminal" title="Terminal">
               <button
-                onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: '`', metaKey: true }))}
+                onClick={() => window.dispatchEvent(new CustomEvent('toggle-terminal'))}
                 className="flex items-center gap-1.5 px-2 py-1.5 rounded text-[10px] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer"
               >
                 <Icon icon="lucide:plus" width={10} height={10} />
@@ -208,7 +208,7 @@ export function DetailsPanel() {
                   <div className="flex items-center gap-1.5 mt-1">
                     <button
                       onClick={() => window.dispatchEvent(new CustomEvent('open-git-panel'))}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-semibold bg-[var(--brand)] text-white hover:opacity-90 transition-opacity cursor-pointer"
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-semibold bg-[var(--brand)] text-[var(--brand-contrast)] hover:opacity-90 transition-opacity cursor-pointer"
                     >
                       Commit & Push {dirtyFiles.length} file{dirtyFiles.length !== 1 ? 's' : ''}
                     </button>

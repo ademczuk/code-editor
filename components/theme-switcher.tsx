@@ -125,7 +125,7 @@ export function ThemeSwitcher() {
                 setPreviewId(null)
                 setOpen(false)
               }}
-              className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-[11px] font-medium bg-[var(--brand)] text-white hover:opacity-90 transition-all cursor-pointer"
+              className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-[11px] font-medium bg-[var(--brand)] text-[var(--brand-contrast)] hover:opacity-90 transition-all cursor-pointer"
             >
               <Icon icon="lucide:check" width={12} height={12} />
               Apply

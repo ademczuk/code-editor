@@ -59,7 +59,7 @@ export function RepoPickerModal({ open, onClose, onSelectFolder, onCloneUrl }: P
               </p>
               <button
                 onClick={() => { onSelectFolder(); onClose() }}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-[12px] font-semibold bg-[var(--brand)] text-white hover:opacity-90 transition-opacity cursor-pointer shadow-md"
+                className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-[12px] font-semibold bg-[var(--brand)] text-[var(--brand-contrast)] hover:opacity-90 transition-opacity cursor-pointer shadow-md"
               >
                 <Icon icon="lucide:folder-open" width={14} height={14} />
                 Select Folder
@@ -88,7 +88,7 @@ export function RepoPickerModal({ open, onClose, onSelectFolder, onCloneUrl }: P
                 disabled={!cloneUrl.trim()}
                 className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[12px] font-semibold transition-all cursor-pointer ${
                   cloneUrl.trim()
-                    ? 'bg-[var(--brand)] text-white hover:opacity-90 shadow-md'
+                    ? 'bg-[var(--brand)] text-[var(--brand-contrast)] hover:opacity-90 shadow-md'
                     : 'bg-[var(--bg-subtle)] text-[var(--text-disabled)] cursor-not-allowed'
                 }`}
               >

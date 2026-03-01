@@ -69,7 +69,7 @@ export function ActivityBar({
               )}
               <Icon icon={item.icon} width={20} height={20} />
               {item.id === 'changes' && dirtyCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] rounded-full bg-[var(--brand)] text-[9px] font-bold text-white flex items-center justify-center px-0.5">
+                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] rounded-full bg-[var(--brand)] text-[9px] font-bold text-[var(--brand-contrast)] flex items-center justify-center px-0.5">
                   {dirtyCount}
                 </span>
               )}

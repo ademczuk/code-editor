@@ -319,7 +319,7 @@ export function ChangeSummaryBar({ fileCount, additions, deletions, onReview, on
         {onCreatePR && (
           <button
             onClick={onCreatePR}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-medium bg-[var(--brand)] text-white hover:opacity-90 transition-opacity cursor-pointer"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-medium bg-[var(--brand)] text-[var(--brand-contrast)] hover:opacity-90 transition-opacity cursor-pointer"
           >
             <Icon icon="lucide:git-pull-request-create" width={10} height={10} />
             Create PR

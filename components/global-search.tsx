@@ -171,14 +171,14 @@ export function GlobalSearch({ open, onClose, onNavigate }: Props) {
             <button
               onClick={() => setCaseSensitive(v => !v)}
               className={`p-1 rounded text-[10px] font-mono transition-colors cursor-pointer ${
-                caseSensitive ? 'bg-[var(--brand)] text-white' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)]'
+                caseSensitive ? 'bg-[var(--brand)] text-[var(--brand-contrast)]' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)]'
               }`}
               title="Case sensitive"
             >Aa</button>
             <button
               onClick={() => setUseRegex(v => !v)}
               className={`p-1 rounded text-[10px] font-mono transition-colors cursor-pointer ${
-                useRegex ? 'bg-[var(--brand)] text-white' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)]'
+                useRegex ? 'bg-[var(--brand)] text-[var(--brand-contrast)]' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)]'
               }`}
               title="Regular expression"
             >.*</button>
