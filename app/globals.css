@@ -1255,6 +1255,16 @@ p { line-height: 1.6; }
   height: 100dvh;
 }
 
+.tauri-drag-region {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.tauri-no-drag {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
 .min-h-screen-safe {
   min-height: 100vh;
   min-height: 100dvh;

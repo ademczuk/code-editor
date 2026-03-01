@@ -14,6 +14,7 @@ import { ResizeHandle } from '@/components/resize-handle'
 import { ThemeSwitcher } from '@/components/theme-switcher'
 import { QuickOpen } from '@/components/quick-open'
 import { ShortcutsOverlay } from '@/components/shortcuts-overlay'
+import { CommandPalette, type CommandId } from '@/components/command-palette'
 
 const STORAGE_REMEMBER = 'code-editor:remember'
 
@@ -264,6 +265,8 @@ function EditorLayout() {
   const [explorerVisible, setExplorerVisible] = useState(true)
   const [quickOpenVisible, setQuickOpenVisible] = useState(false)
   const [shortcutsVisible, setShortcutsVisible] = useState(false)
+  const [commandPaletteVisible, setCommandPaletteVisible] = useState(false)
+  const [isTauriDesktop, setIsTauriDesktop] = useState(false)
   const [isMacTauri, setIsMacTauri] = useState(false)
 
   const dirtyCount = files.filter(f => f.dirty).length
@@ -311,6 +314,7 @@ function EditorLayout() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey) {
+        if (!e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); setCommandPaletteVisible(true); return }
         if (e.key === 'b') { e.preventDefault(); setExplorerVisible(v => !v) }
         if (e.key === 'j') { e.preventDefault(); setAgentOpen(v => !v) }
         if (e.key === 'p') { e.preventDefault(); setQuickOpenVisible(v => !v) }
@@ -332,17 +336,26 @@ function EditorLayout() {
     }
     const runningInTauri = Boolean(tauriWindow.__TAURI__ || tauriWindow.__TAURI_INTERNALS__)
     const isMacOS = navigator.userAgent.includes('Mac')
+    setIsTauriDesktop(runningInTauri)
     setIsMacTauri(runningInTauri && isMacOS)
+  }, [])
+
+  const handleRunCommand = useCallback((commandId: CommandId) => {
+    if (commandId === 'find-files') {
+      setQuickOpenVisible(true)
+      return
+    }
+    window.dispatchEvent(new CustomEvent('editor-command', { detail: { commandId } }))
   }, [])
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Top bar */}
-      <header className={`flex items-center justify-between h-11 border-b border-[var(--border)] bg-[var(--bg-elevated)] shrink-0 ${isMacTauri ? 'pl-20 pr-4' : 'px-4'}`}>
+      <header data-tauri-drag-region className={`flex items-center justify-between h-11 border-b border-[var(--border)] bg-[var(--bg-elevated)] shrink-0 ${isTauriDesktop ? 'tauri-drag-region' : ''} ${isMacTauri ? 'pl-20 pr-4' : 'px-4'}`}>
         <div className="flex items-center gap-3">
           <button
             onClick={() => setExplorerVisible(v => !v)}
-            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${explorerVisible
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${isTauriDesktop ? 'tauri-no-drag' : ''} ${explorerVisible
                 ? 'text-[var(--text-primary)] hover:bg-[var(--bg-subtle)]'
                 : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)]'
               }`}
@@ -356,7 +369,9 @@ function EditorLayout() {
             <span className="text-[13px] font-bold text-[var(--text-primary)]">code-editor</span>
           </div>
           <div className="w-px h-5 bg-[var(--border)]" />
-          <RepoSelector />
+          <div className={isTauriDesktop ? 'tauri-no-drag' : ''}>
+            <RepoSelector />
+          </div>
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -369,11 +384,13 @@ function EditorLayout() {
             gateway
           </span> */}
 
-          <ThemeSwitcher />
+          <div className={isTauriDesktop ? 'tauri-no-drag' : ''}>
+            <ThemeSwitcher />
+          </div>
 
           <button
             onClick={() => setAgentOpen(!agentOpen)}
-            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${agentOpen
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${isTauriDesktop ? 'tauri-no-drag' : ''} ${agentOpen
                 ? 'text-[var(--brand)] bg-[color-mix(in_srgb,var(--brand)_10%,transparent)]'
                 : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)]'
               }`}
@@ -442,6 +459,13 @@ function EditorLayout() {
       <ShortcutsOverlay
         open={shortcutsVisible}
         onClose={() => setShortcutsVisible(false)}
+      />
+
+      {/* Command Palette (⌘K) */}
+      <CommandPalette
+        open={commandPaletteVisible}
+        onClose={() => setCommandPaletteVisible(false)}
+        onRun={handleRunCommand}
       />
 
       {/* Status bar */}

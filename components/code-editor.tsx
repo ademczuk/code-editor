@@ -7,6 +7,8 @@ import { Icon } from '@iconify/react'
 import { useEditor } from '@/context/editor-context'
 import { registerEditorTheme } from '@/lib/monaco-theme'
 import { InlineEdit } from '@/components/inline-edit'
+import { MarkdownPreview } from '@/components/markdown-preview'
+import { MarkdownModeToggle, type MarkdownViewMode } from '@/components/markdown-mode-toggle'
 
 export function CodeEditor() {
   const { files, activeFile, updateFileContent } = useEditor()
@@ -19,6 +21,7 @@ export function CodeEditor() {
     startLine: number
     endLine: number
   }>({ visible: false, position: { top: 0, left: 0 }, selectedText: '', startLine: 0, endLine: 0 })
+  const [markdownModes, setMarkdownModes] = useState<Record<string, MarkdownViewMode>>({})
 
   useEffect(() => {
     let mounted = true
@@ -58,10 +61,10 @@ export function CodeEditor() {
     editor.focus()
   }, [])
 
-  // ⌘K: Inline edit at selection (global keyboard listener)
+  // ⌘⇧K: Inline edit at selection (global keyboard listener)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         const editor = editorRef.current
         if (!editor) return
@@ -89,6 +92,71 @@ export function CodeEditor() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || !e.shiftKey || e.key.toLowerCase() !== 'v') return
+      if (!file || file.kind !== 'text' || !/\.(md|mdx)$/i.test(file.path)) return
+      e.preventDefault()
+      const current = markdownModes[file.path] ?? 'edit'
+      const next: MarkdownViewMode = current === 'edit' ? 'preview' : current === 'preview' ? 'split' : 'edit'
+      setMarkdownModes(prev => ({ ...prev, [file.path]: next }))
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [file, markdownModes])
+
+  // Command palette -> Monaco command bridge
+  useEffect(() => {
+    const runMonacoAction = async (actionIds: string[]) => {
+      const editor = editorRef.current
+      if (!editor) return
+      for (const actionId of actionIds) {
+        const action = editor.getAction(actionId)
+        if (!action) continue
+        try {
+          await action.run()
+          return
+        } catch {
+          // Try the next fallback action id.
+        }
+      }
+    }
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ commandId: string }>).detail
+      if (!detail?.commandId) return
+      const editor = editorRef.current
+      if (!editor) return
+
+      switch (detail.commandId) {
+        case 'format-document':
+          void runMonacoAction(['editor.action.formatDocument'])
+          break
+        case 'find-in-file':
+          editor.trigger('keyboard', 'actions.find', null)
+          break
+        case 'replace-in-file':
+          editor.trigger('keyboard', 'editor.action.startFindReplaceAction', null)
+          break
+        case 'toggle-case-sensitive':
+          editor.trigger('keyboard', 'editor.action.startFindReplaceAction', null)
+          void runMonacoAction(['editor.action.toggleCaseSensitive', 'toggleFindCaseSensitive'])
+          break
+        case 'toggle-whole-word':
+          editor.trigger('keyboard', 'editor.action.startFindReplaceAction', null)
+          void runMonacoAction(['editor.action.toggleWholeWord', 'toggleFindWholeWord'])
+          break
+        case 'toggle-regex':
+          editor.trigger('keyboard', 'editor.action.startFindReplaceAction', null)
+          void runMonacoAction(['editor.action.toggleRegex', 'toggleFindRegex'])
+          break
+      }
+    }
+
+    window.addEventListener('editor-command', handler)
+    return () => window.removeEventListener('editor-command', handler)
   }, [])
 
   const handleChange = useCallback((value: string | undefined) => {
@@ -123,6 +191,48 @@ export function CodeEditor() {
       : file?.kind === 'audio'
         ? 'lucide:music'
       : 'lucide:file-code'
+  const isMarkdown = Boolean(file?.kind === 'text' && /\.(md|mdx)$/i.test(file.path))
+  const markdownMode = (file && isMarkdown ? (markdownModes[file.path] ?? 'edit') : 'edit') as MarkdownViewMode
+
+  const setMarkdownMode = (mode: MarkdownViewMode) => {
+    if (!file || !isMarkdown) return
+    setMarkdownModes(prev => ({ ...prev, [file.path]: mode }))
+  }
+
+  const monacoEditor = (
+    monacoReady ? (
+      <Editor
+        key={file?.path}
+        height="100%"
+        defaultValue={file?.content}
+        language={file?.language}
+        theme="code-editor"
+        onChange={handleChange}
+        beforeMount={handleBeforeMount}
+        onMount={handleMount}
+        options={{
+          fontSize: 13,
+          fontFamily: "'SF Mono', 'Fira Code', 'JetBrains Mono', Menlo, monospace",
+          fontLigatures: true,
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          padding: { top: 12 },
+          lineNumbers: 'on',
+          renderLineHighlight: 'line',
+          bracketPairColorization: { enabled: true },
+          guides: { indentation: true, bracketPairs: true },
+          smoothScrolling: true,
+          cursorBlinking: 'smooth',
+          cursorSmoothCaretAnimation: 'on',
+          tabSize: 2,
+          wordWrap: 'on',
+          automaticLayout: true,
+        }}
+      />
+    ) : (
+      <div className="h-full w-full bg-[var(--bg)]" />
+    )
+  )
 
   if (!file) {
     return (
@@ -146,34 +256,41 @@ export function CodeEditor() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Breadcrumb navigation */}
-      <div className="flex items-center gap-0.5 px-3 py-1 border-b border-[var(--border)] bg-[var(--bg)] shrink-0 overflow-x-auto no-scrollbar">
-        <Icon icon={fileIcon} width={12} height={12} className="text-[var(--text-tertiary)] shrink-0" />
-        {file.path.split('/').map((segment, i, arr) => (
-          <div key={i} className="flex items-center gap-0.5 shrink-0">
-            {i > 0 && (
-              <Icon icon="lucide:chevron-right" width={10} height={10} className="text-[var(--text-tertiary)]" />
-            )}
-            <button
-              className={`text-[10px] font-mono px-1 py-0.5 rounded transition-colors cursor-pointer ${
-                i === arr.length - 1
-                  ? 'text-[var(--text-primary)] hover:bg-[var(--bg-subtle)]'
-                  : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]'
-              }`}
-              onClick={() => {
-                if (i < arr.length - 1) {
-                  // Navigate to directory — dispatch search with prefix
-                  const dirPath = arr.slice(0, i + 1).join('/')
-                  window.dispatchEvent(new CustomEvent('quick-open-prefill', { detail: { query: dirPath + '/' } }))
-                }
-              }}
-              title={arr.slice(0, i + 1).join('/')}
-            >
-              {segment}
-            </button>
+      <div className="flex items-center justify-between gap-2 px-3 py-1 border-b border-[var(--border)] bg-[var(--bg)] shrink-0">
+        <div className="flex items-center gap-0.5 overflow-x-auto no-scrollbar min-w-0">
+          <Icon icon={fileIcon} width={12} height={12} className="text-[var(--text-tertiary)] shrink-0" />
+          {file.path.split('/').map((segment, i, arr) => (
+            <div key={i} className="flex items-center gap-0.5 shrink-0">
+              {i > 0 && (
+                <Icon icon="lucide:chevron-right" width={10} height={10} className="text-[var(--text-tertiary)]" />
+              )}
+              <button
+                className={`text-[10px] font-mono px-1 py-0.5 rounded transition-colors cursor-pointer ${
+                  i === arr.length - 1
+                    ? 'text-[var(--text-primary)] hover:bg-[var(--bg-subtle)]'
+                    : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]'
+                }`}
+                onClick={() => {
+                  if (i < arr.length - 1) {
+                    // Navigate to directory — dispatch search with prefix
+                    const dirPath = arr.slice(0, i + 1).join('/')
+                    window.dispatchEvent(new CustomEvent('quick-open-prefill', { detail: { query: dirPath + '/' } }))
+                  }
+                }}
+                title={arr.slice(0, i + 1).join('/')}
+              >
+                {segment}
+              </button>
+            </div>
+          ))}
+          {file.dirty && (
+            <span className="text-[9px] text-[var(--brand)] font-medium ml-1 shrink-0">modified</span>
+          )}
+        </div>
+        {isMarkdown && (
+          <div className="shrink-0">
+            <MarkdownModeToggle mode={markdownMode} onModeChange={setMarkdownMode} />
           </div>
-        ))}
-        {file.dirty && (
-          <span className="text-[9px] text-[var(--brand)] font-medium ml-1 shrink-0">modified</span>
         )}
       </div>
 
@@ -244,37 +361,23 @@ export function CodeEditor() {
               </div>
             )}
           </div>
-        ) : monacoReady ? (
-          <Editor
-            key={file.path}
-            height="100%"
-            defaultValue={file.content}
-            language={file.language}
-            theme="code-editor"
-            onChange={handleChange}
-            beforeMount={handleBeforeMount}
-            onMount={handleMount}
-            options={{
-              fontSize: 13,
-              fontFamily: "'SF Mono', 'Fira Code', 'JetBrains Mono', Menlo, monospace",
-              fontLigatures: true,
-              minimap: { enabled: false },
-              scrollBeyondLastLine: false,
-              padding: { top: 12 },
-              lineNumbers: 'on',
-              renderLineHighlight: 'line',
-              bracketPairColorization: { enabled: true },
-              guides: { indentation: true, bracketPairs: true },
-              smoothScrolling: true,
-              cursorBlinking: 'smooth',
-              cursorSmoothCaretAnimation: 'on',
-              tabSize: 2,
-              wordWrap: 'on',
-              automaticLayout: true,
-            }}
-          />
+        ) : isMarkdown ? (
+          markdownMode === 'preview' ? (
+            <div className="h-full overflow-auto bg-[var(--bg)]">
+              <MarkdownPreview content={file.content} className="max-w-5xl mx-auto p-5" />
+            </div>
+          ) : markdownMode === 'split' ? (
+            <div className="h-full min-h-0 flex">
+              <div className="w-1/2 min-w-0 border-r border-[var(--border)]">
+                {monacoEditor}
+              </div>
+              <div className="w-1/2 min-w-0 overflow-auto bg-[var(--bg)]">
+                <MarkdownPreview content={file.content} className="max-w-none p-5" />
+              </div>
+            </div>
+          ) : monacoEditor
         ) : (
-          <div className="h-full w-full bg-[var(--bg)]" />
+          monacoEditor
         )}
       </div>
     </div>

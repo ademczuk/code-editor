@@ -12,6 +12,7 @@ const SECTIONS = [
   {
     title: 'Navigation',
     shortcuts: [
+      { keys: ['⌘', 'K'], desc: 'Command palette' },
       { keys: ['⌘', 'P'], desc: 'Quick file open' },
       { keys: ['⌘', 'B'], desc: 'Toggle file explorer' },
       { keys: ['⌘', 'J'], desc: 'Toggle agent panel' },
@@ -21,7 +22,8 @@ const SECTIONS = [
   {
     title: 'Editing',
     shortcuts: [
-      { keys: ['⌘', 'K'], desc: 'Inline edit at selection' },
+      { keys: ['⌘', '⇧', 'K'], desc: 'Inline edit at selection' },
+      { keys: ['⌘', '⇧', 'V'], desc: 'Cycle markdown edit/preview/split' },
       { keys: ['⌘', 'S'], desc: 'Save (commit) file' },
       { keys: ['⌘', 'Z'], desc: 'Undo' },
       { keys: ['⌘', '⇧', 'Z'], desc: 'Redo' },

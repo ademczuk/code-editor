@@ -37,7 +37,7 @@ function detectLanguage(path: string): string {
   const ext = path.split('.').pop()?.toLowerCase() ?? ''
   const map: Record<string, string> = {
     ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',
-    json: 'json', md: 'markdown', css: 'css', scss: 'scss',
+    json: 'json', md: 'markdown', mdx: 'markdown', css: 'css', scss: 'scss',
     html: 'html', xml: 'xml', yaml: 'yaml', yml: 'yaml',
     py: 'python', rs: 'rust', go: 'go', rb: 'ruby',
     sh: 'shell', bash: 'shell', zsh: 'shell',
