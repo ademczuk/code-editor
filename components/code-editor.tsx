@@ -12,7 +12,6 @@ import { createInlineCompletionsProvider } from '@/lib/inline-completions'
 import { InlineEdit } from '@/components/inline-edit'
 import { MarkdownPreview } from '@/components/markdown-preview'
 import { MarkdownModeToggle, type MarkdownViewMode } from '@/components/markdown-mode-toggle'
-import { VimCheatsheet } from '@/components/vim-cheatsheet'
 
 function WelcomeView() {
   const recentFolders = (() => {
@@ -143,16 +142,10 @@ export function CodeEditor() {
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
   const monacoInstanceRef = useRef<Parameters<BeforeMount>[0] | null>(null)
   const [monacoReady, setMonacoReady] = useState(false)
-  const [vimEnabled, setVimEnabled] = useState(() => {
-    if (typeof window === 'undefined') return false
-    return localStorage.getItem('code-editor:vim-mode') === 'true'
-  })
   const [readOnly, setReadOnly] = useState(() => {
     if (typeof window === 'undefined') return false
     return localStorage.getItem('code-editor:read-only') === 'true'
   })
-  const vimModeRef = useRef<{ dispose: () => void } | null>(null)
-  const vimStatusRef = useRef<HTMLDivElement>(null)
   const [inlineEdit, setInlineEdit] = useState<{
     visible: boolean
     position: { top: number; left: number }
@@ -161,7 +154,6 @@ export function CodeEditor() {
     endLine: number
   }>({ visible: false, position: { top: 0, left: 0 }, selectedText: '', startLine: 0, endLine: 0 })
   const [markdownModes, setMarkdownModes] = useState<Record<string, MarkdownViewMode>>({})
-  const [vimCheatsheetOpen, setVimCheatsheetOpen] = useState(false)
 
   const getEditor = useCallback(() => {
     const editor = editorRef.current
@@ -334,39 +326,6 @@ export function CodeEditor() {
     return () => window.removeEventListener('keydown', handler)
   }, [file, markdownModes])
 
-  // Vim mode activation
-  useEffect(() => {
-    const editor = getEditor()
-    if (!editor || !monacoReady) return
-
-    // Cleanup previous vim instance
-    if (vimModeRef.current) {
-      vimModeRef.current.dispose()
-      vimModeRef.current = null
-    }
-
-    if (!vimEnabled) return
-
-    let disposed = false
-    ;(async () => {
-      const { initVimMode } = await import('monaco-vim')
-      if (disposed || !vimStatusRef.current) return
-      vimModeRef.current = initVimMode(editor, vimStatusRef.current)
-    })()
-
-    return () => {
-      disposed = true
-      if (vimModeRef.current) {
-        vimModeRef.current.dispose()
-        vimModeRef.current = null
-      }
-    }
-  }, [vimEnabled, monacoReady, activeFile, getEditor])
-
-  // Persist vim mode preference
-  useEffect(() => {
-    localStorage.setItem('code-editor:vim-mode', String(vimEnabled))
-  }, [vimEnabled])
 
   // Persist read-only preference
   useEffect(() => {
@@ -581,29 +540,7 @@ export function CodeEditor() {
             <Icon icon={readOnly ? 'lucide:lock' : 'lucide:lock-open'} width={10} height={10} />
             {readOnly ? 'RO' : 'RW'}
           </button>
-          {/* Vim mode toggle + cheatsheet */}
-          <div className="flex items-center">
-            <button
-              onClick={() => setVimEnabled(v => !v)}
-              className={`flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono transition-colors cursor-pointer ${
-                vimEnabled
-                  ? 'bg-[color-mix(in_srgb,var(--brand)_15%,transparent)] text-[var(--brand)] border border-[color-mix(in_srgb,var(--brand)_30%,transparent)] rounded-l'
-                  : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] rounded'
-              }`}
-              title={vimEnabled ? 'Disable Vim mode' : 'Enable Vim mode'}
-            >
-              VIM
-            </button>
-            {vimEnabled && (
-              <button
-                onClick={() => setVimCheatsheetOpen(true)}
-                className="px-1 py-0.5 rounded-r border border-l-0 border-[color-mix(in_srgb,var(--brand)_30%,transparent)] bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] text-[var(--brand)] hover:bg-[color-mix(in_srgb,var(--brand)_20%,transparent)] transition-colors cursor-pointer"
-                title="Vim Cheatsheet"
-              >
-                <Icon icon="lucide:help-circle" width={11} height={11} />
-              </button>
-            )}
-          </div>
+
           {isMarkdown && (
             <MarkdownModeToggle mode={markdownMode} onModeChange={setMarkdownMode} />
           )}
@@ -697,21 +634,7 @@ export function CodeEditor() {
         )}
       </div>
 
-      {/* Vim status bar */}
-      {vimEnabled && (
-        <div className="flex items-center h-5 px-3 border-t border-[var(--border)] bg-[var(--bg-secondary)] shrink-0">
-          <div
-            ref={vimStatusRef}
-            className="text-[10px] font-mono text-[var(--brand)] [&>*]:!text-[10px] [&>*]:!font-mono"
-          />
-        </div>
-      )}
 
-      {/* Vim Cheatsheet */}
-      <VimCheatsheet
-        open={vimCheatsheetOpen}
-        onClose={() => setVimCheatsheetOpen(false)}
-      />
     </div>
   )
 }
