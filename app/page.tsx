@@ -15,6 +15,12 @@ import { ThemeSwitcher } from '@/components/theme-switcher'
 
 const STORAGE_REMEMBER = 'code-editor:remember'
 
+function decodeBase64Utf8(input: string): string {
+  const normalized = input.replace(/\n/g, '')
+  const binary = atob(normalized)
+  return new TextDecoder().decode(Uint8Array.from(binary, c => c.charCodeAt(0)))
+}
+
 // ─── Gateway Login ──────────────────────────────────────────────
 
 function GatewayLogin() {
@@ -30,7 +36,7 @@ function GatewayLogin() {
       if (savedUrl) setUrl(savedUrl)
       const savedRemember = localStorage.getItem(STORAGE_REMEMBER)
       if (savedRemember === 'false') setRemember(false)
-    } catch {}
+    } catch { }
   }, [])
 
   const loading = status === 'connecting' || status === 'authenticating'
@@ -38,7 +44,7 @@ function GatewayLogin() {
   const handleConnect = (e: React.FormEvent) => {
     e.preventDefault()
     if (!url.trim() || !password.trim()) return
-    try { localStorage.setItem(STORAGE_REMEMBER, String(remember)) } catch {}
+    try { localStorage.setItem(STORAGE_REMEMBER, String(remember)) } catch { }
     connect(url.trim(), password.trim())
   }
 
@@ -216,7 +222,7 @@ function EditorLayout() {
         if (!res.ok) throw new Error('Failed to fetch file')
         const data = await res.json()
         const content = data.content
-          ? atob(data.content.replace(/\\n/g, ''))
+          ? decodeBase64Utf8(data.content)
           : data.text ?? ''
         openFile(path, content, data.sha ?? sha)
       } catch (err) {
@@ -254,11 +260,10 @@ function EditorLayout() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => setExplorerVisible(v => !v)}
-            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-              explorerVisible
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${explorerVisible
                 ? 'text-[var(--text-primary)] hover:bg-[var(--bg-subtle)]'
                 : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)]'
-            }`}
+              }`}
             title={`${explorerVisible ? 'Hide' : 'Show'} explorer (\u2318B)`}
           >
             <Icon icon="lucide:panel-left" width={16} height={16} />
@@ -273,24 +278,23 @@ function EditorLayout() {
         </div>
 
         <div className="flex items-center gap-1.5">
-          <span className={`flex items-center gap-1 text-[10px] mr-1 ${
+          {/* <span className={`flex items-center gap-1 text-[10px] mr-1 ${
             status === 'connected' ? 'text-[var(--color-additions)]' : 'text-[var(--text-tertiary)]'
           }`}>
             <span className={`w-1.5 h-1.5 rounded-full ${
               status === 'connected' ? 'bg-[var(--color-additions)]' : 'bg-[var(--text-tertiary)]'
             }`} />
             gateway
-          </span>
+          </span> */}
 
           <ThemeSwitcher />
 
           <button
             onClick={() => setAgentOpen(!agentOpen)}
-            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-              agentOpen
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${agentOpen
                 ? 'text-[var(--brand)] bg-[color-mix(in_srgb,var(--brand)_10%,transparent)]'
                 : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)]'
-            }`}
+              }`}
             title={`${agentOpen ? 'Hide' : 'Show'} agent (\u2318J)`}
           >
             <Icon icon="lucide:sparkles" width={15} height={15} />

@@ -8,8 +8,12 @@ import { useRepo } from '@/context/repo-context'
 import { MarkdownPreview } from '@/components/markdown-preview'
 import { DiffViewer } from '@/components/diff-viewer'
 import { parseEditProposals, type EditProposal } from '@/lib/edit-parser'
-
-const SESSION_KEY = 'agent:main:code-editor'
+import {
+  CODE_EDITOR_SESSION_KEY,
+  SESSION_INIT_STORAGE_KEY,
+  CODE_EDITOR_SYSTEM_PROMPT,
+  buildEditorContext,
+} from '@/lib/agent-session'
 
 interface ChatMessage {
   id: string
@@ -28,40 +32,76 @@ export function AgentPanel() {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
-  const [activeDiff, setActiveDiff] = useState<{ proposal: EditProposal; messageId: string; original: string } | null>(null)
+  const [activeDiff, setActiveDiff] = useState<{
+    proposal: EditProposal
+    messageId: string
+    original: string
+  } | null>(null)
+
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const sessionInitRef = useRef(false)
 
   const isConnected = status === 'connected'
 
-  // Auto-scroll
+  // ─── Session initialization (inject system prompt once) ───────
+  useEffect(() => {
+    if (!isConnected || sessionInitRef.current) return
+
+    const initKey = `${SESSION_INIT_STORAGE_KEY}:${CODE_EDITOR_SESSION_KEY}`
+    const alreadyInit = typeof window !== 'undefined' && sessionStorage.getItem(initKey)
+    if (alreadyInit) {
+      sessionInitRef.current = true
+      return
+    }
+
+    // Inject system prompt
+    sendRequest('chat.inject', {
+      sessionKey: CODE_EDITOR_SESSION_KEY,
+      message: CODE_EDITOR_SYSTEM_PROMPT,
+      label: 'Code Editor system prompt',
+    }).then(() => {
+      sessionInitRef.current = true
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem(initKey, 'true')
+      }
+    }).catch(() => {
+      // Non-fatal — session still works without explicit system prompt
+    })
+
+    // Label the session
+    sendRequest('sessions.patch', {
+      key: CODE_EDITOR_SESSION_KEY,
+      label: 'Code Editor Agent',
+    }).catch(() => { /* non-fatal */ })
+  }, [isConnected, sendRequest])
+
+  // ─── Auto-scroll ──────────────────────────────────────────────
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [messages])
 
-  // Build context for agent
+  // ─── Build per-message context ────────────────────────────────
   const buildContext = useCallback(() => {
-    const parts: string[] = []
-    if (repo) parts.push(`[Repo: ${repo.fullName} (${repo.branch})]`)
-    const file = activeFile ? getFile(activeFile) : null
-    if (file) {
-      const preview = file.content.length > 6000 ? file.content.slice(0, 6000) + '\n[...truncated]' : file.content
-      parts.push(`[Active file: ${file.path}]\n\`\`\`${file.language}\n${preview}\n\`\`\``)
-    }
-    const dirtyFiles = files.filter(f => f.dirty)
-    if (dirtyFiles.length > 0) {
-      parts.push(`[Modified files: ${dirtyFiles.map(f => f.path).join(', ')}]`)
-    }
-    parts.push(`[Instructions: When proposing code edits, wrap them like: [EDIT path/to/file.ts] followed by a fenced code block. The user will see a diff and can apply or reject.]`)
-    return parts.join('\n\n')
+    const file = activeFile ? getFile(activeFile) : undefined
+    return buildEditorContext({
+      repoFullName: repo?.fullName,
+      branch: repo?.branch,
+      activeFilePath: file?.path,
+      activeFileContent: file?.content,
+      activeFileLanguage: file?.language,
+      openFiles: files.map(f => ({ path: f.path, dirty: f.dirty })),
+    })
   }, [repo, activeFile, files, getFile])
 
+  // ─── Message helpers ──────────────────────────────────────────
   const appendMessage = useCallback((msg: ChatMessage) => {
     setMessages(prev => [...prev, msg])
   }, [])
 
+  // ─── Send message ─────────────────────────────────────────────
   const sendMessage = useCallback(async () => {
     const text = input.trim()
     if (!text || sending) return
@@ -72,7 +112,11 @@ export function AgentPanel() {
     appendMessage({ id: crypto.randomUUID(), role: 'user', content: text, timestamp: Date.now() })
 
     if (!isConnected) {
-      appendMessage({ id: crypto.randomUUID(), role: 'system', content: 'Gateway disconnected — cannot reach agent.', timestamp: Date.now() })
+      appendMessage({
+        id: crypto.randomUUID(), role: 'system',
+        content: 'Gateway disconnected — cannot reach agent.',
+        timestamp: Date.now(),
+      })
       setSending(false)
       return
     }
@@ -83,7 +127,7 @@ export function AgentPanel() {
 
       setIsStreaming(true)
       const resp = (await sendRequest('chat.send', {
-        sessionKey: SESSION_KEY,
+        sessionKey: CODE_EDITOR_SESSION_KEY,
         message: fullMessage,
         idempotencyKey: `ce-${Date.now()}`,
       })) as Record<string, unknown> | undefined
@@ -101,8 +145,7 @@ export function AgentPanel() {
       }
     } catch (err) {
       appendMessage({
-        id: crypto.randomUUID(),
-        role: 'system',
+        id: crypto.randomUUID(), role: 'system',
         content: `Error: ${err instanceof Error ? err.message : 'Unknown error'}`,
         timestamp: Date.now(),
       })
@@ -112,6 +155,7 @@ export function AgentPanel() {
     }
   }, [input, sending, isConnected, sendRequest, buildContext, appendMessage])
 
+  // ─── Keyboard ─────────────────────────────────────────────────
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -119,16 +163,15 @@ export function AgentPanel() {
     }
   }, [sendMessage])
 
+  // ─── Diff review flow ─────────────────────────────────────────
   const handleShowDiff = useCallback((proposal: EditProposal, messageId: string) => {
     const existing = getFile(proposal.filePath)
-    const original = existing?.content ?? ''
-    setActiveDiff({ proposal, messageId, original })
+    setActiveDiff({ proposal, messageId, original: existing?.content ?? '' })
   }, [getFile])
 
   const handleApplyEdit = useCallback(() => {
     if (!activeDiff) return
     const { proposal } = activeDiff
-    // Open file with new content (or update if already open)
     const existing = getFile(proposal.filePath)
     if (existing) {
       updateFileContent(proposal.filePath, proposal.content)
@@ -136,9 +179,8 @@ export function AgentPanel() {
       openFile(proposal.filePath, proposal.content, undefined)
     }
     appendMessage({
-      id: crypto.randomUUID(),
-      role: 'system',
-      content: `Applied edit to \`${proposal.filePath}\`. File is now modified — use /commit to save.`,
+      id: crypto.randomUUID(), role: 'system',
+      content: `Applied edit to \`${proposal.filePath}\`. File is modified — use /commit to save.`,
       timestamp: Date.now(),
     })
     setActiveDiff(null)
@@ -147,29 +189,40 @@ export function AgentPanel() {
   const handleRejectEdit = useCallback(() => {
     if (!activeDiff) return
     appendMessage({
-      id: crypto.randomUUID(),
-      role: 'system',
+      id: crypto.randomUUID(), role: 'system',
       content: `Rejected edit to \`${activeDiff.proposal.filePath}\`.`,
       timestamp: Date.now(),
     })
     setActiveDiff(null)
   }, [activeDiff, appendMessage])
 
-  // Slash command suggestions
+  // ─── Slash command suggestions ────────────────────────────────
   const suggestions = useMemo(() => {
     if (!input.startsWith('/')) return []
     const cmds = [
-      { cmd: '/edit', desc: 'Edit current file' },
-      { cmd: '/explain', desc: 'Explain selected code' },
-      { cmd: '/refactor', desc: 'Refactor code' },
-      { cmd: '/generate', desc: 'Generate new code' },
-      { cmd: '/search', desc: 'Search across repo' },
-      { cmd: '/commit', desc: 'Commit changes' },
-      { cmd: '/diff', desc: 'Show current changes' },
+      { cmd: '/edit', desc: 'Edit current file', icon: 'lucide:pencil' },
+      { cmd: '/explain', desc: 'Explain code', icon: 'lucide:book-open' },
+      { cmd: '/refactor', desc: 'Refactor code', icon: 'lucide:refresh-cw' },
+      { cmd: '/generate', desc: 'Generate new code', icon: 'lucide:plus' },
+      { cmd: '/search', desc: 'Search across repo', icon: 'lucide:search' },
+      { cmd: '/commit', desc: 'Commit changes', icon: 'lucide:git-commit-horizontal' },
+      { cmd: '/diff', desc: 'Show changes', icon: 'lucide:git-compare' },
     ]
     const term = input.toLowerCase()
     return cmds.filter(c => c.cmd.startsWith(term))
   }, [input])
+
+  // ─── Clear chat ───────────────────────────────────────────────
+  const [confirmClear, setConfirmClear] = useState(false)
+  const handleClear = useCallback(() => {
+    if (!confirmClear) {
+      setConfirmClear(true)
+      setTimeout(() => setConfirmClear(false), 3000)
+      return
+    }
+    setMessages([])
+    setConfirmClear(false)
+  }, [confirmClear])
 
   // ─── Diff overlay ─────────────────────────────────────────────
   if (activeDiff) {
@@ -184,16 +237,32 @@ export function AgentPanel() {
     )
   }
 
+  // ─── Render ───────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[var(--bg)]">
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border)] shrink-0">
-        <Icon icon="lucide:sparkles" width={14} height={14} className="text-[var(--brand)]" />
-        <span className="text-[12px] font-semibold text-[var(--text-primary)]">Agent</span>
-        <span className="text-[10px] text-[var(--text-tertiary)]">&middot;</span>
-        <span className={`text-[10px] ${isConnected ? 'text-[var(--color-additions)]' : 'text-[var(--color-deletions)]'}`}>
-          {isConnected ? 'connected' : 'offline'}
-        </span>
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border)] shrink-0">
+        <div className="flex items-center gap-2">
+          <Icon icon="lucide:sparkles" width={14} height={14} className="text-[var(--brand)]" />
+          <span className="text-[12px] font-semibold text-[var(--text-primary)]">Agent</span>
+          <span className="text-[10px] text-[var(--text-tertiary)]">&middot;</span>
+          <span className={`text-[10px] ${isConnected ? 'text-[var(--color-additions)]' : 'text-[var(--color-deletions)]'}`}>
+            {isConnected ? 'connected' : 'offline'}
+          </span>
+        </div>
+        {messages.length > 0 && (
+          <button
+            onClick={handleClear}
+            className={`p-1 rounded text-[10px] transition-colors cursor-pointer ${
+              confirmClear
+                ? 'text-[var(--color-deletions)] bg-[color-mix(in_srgb,var(--color-deletions)_10%,transparent)]'
+                : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
+            }`}
+            title={confirmClear ? 'Click again to clear' : 'Clear chat'}
+          >
+            <Icon icon={confirmClear ? 'lucide:alert-triangle' : 'lucide:eraser'} width={13} height={13} />
+          </button>
+        )}
       </div>
 
       {/* Messages */}
@@ -201,12 +270,24 @@ export function AgentPanel() {
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center text-center py-8">
             <Icon icon="lucide:sparkles" width={24} height={24} className="text-[var(--brand)] mb-2" />
-            <p className="text-[12px] text-[var(--text-secondary)]">Coding Agent</p>
+            <p className="text-[12px] font-medium text-[var(--text-secondary)]">Coding Agent</p>
             <p className="text-[10px] text-[var(--text-tertiary)] mt-1 max-w-[200px]">
-              Ask me to edit, explain, refactor, or generate code.
+              Full-stack expert. Ask me to edit, explain, refactor, or generate code.
             </p>
+            <div className="flex flex-wrap gap-1.5 mt-3 justify-center">
+              {['/edit', '/explain', '/refactor', '/generate'].map(cmd => (
+                <button
+                  key={cmd}
+                  onClick={() => setInput(cmd + ' ')}
+                  className="text-[10px] font-mono px-2 py-1 rounded bg-[var(--bg-subtle)] border border-[var(--border)] text-[var(--text-tertiary)] hover:border-[var(--brand)] hover:text-[var(--brand)] transition-colors cursor-pointer"
+                >
+                  {cmd}
+                </button>
+              ))}
+            </div>
           </div>
         )}
+
         {messages.map(msg => (
           <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
             <div className={`max-w-[90%] min-w-0 rounded-xl px-3 py-2 text-[12px] leading-relaxed ${
@@ -225,7 +306,7 @@ export function AgentPanel() {
               )}
             </div>
 
-            {/* Edit proposal action buttons */}
+            {/* Edit proposal buttons */}
             {msg.editProposals && msg.editProposals.length > 0 && (
               <div className="flex flex-col gap-1 mt-1.5">
                 {msg.editProposals.map((proposal, i) => (
@@ -247,6 +328,7 @@ export function AgentPanel() {
             )}
           </div>
         ))}
+
         {isStreaming && (
           <div className="flex justify-start">
             <div className="px-3 py-2 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border)] rounded-bl-sm">
@@ -258,16 +340,17 @@ export function AgentPanel() {
 
       {/* Suggestions */}
       {suggestions.length > 0 && (
-        <div className="px-3 pb-1">
+        <div className="px-3 pb-1 shrink-0">
           <div className="flex flex-wrap gap-1">
             {suggestions.map(s => (
               <button
                 key={s.cmd}
                 onClick={() => setInput(s.cmd + ' ')}
-                className="text-[10px] px-2 py-0.5 rounded bg-[var(--bg-subtle)] border border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--brand)] transition-colors cursor-pointer"
+                className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-[var(--bg-subtle)] border border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--brand)] transition-colors cursor-pointer"
               >
+                <Icon icon={s.icon} width={10} height={10} className="text-[var(--brand)]" />
                 <span className="font-mono text-[var(--brand)]">{s.cmd}</span>
-                <span className="ml-1 text-[var(--text-tertiary)]">{s.desc}</span>
+                <span className="text-[var(--text-tertiary)]">{s.desc}</span>
               </button>
             ))}
           </div>
@@ -282,7 +365,7 @@ export function AgentPanel() {
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask or type /command..."
+            placeholder={activeFile ? `Ask about ${activeFile.split('/').pop()}...` : 'Ask or type /command...'}
             rows={1}
             className="w-full resize-none rounded-lg bg-[var(--bg-subtle)] border border-[var(--border)] px-3 py-2 pr-10 text-[12px] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none focus:border-[var(--brand)] transition-colors"
           />
@@ -290,7 +373,7 @@ export function AgentPanel() {
             onClick={sendMessage}
             disabled={!input.trim() || sending}
             className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-[var(--brand)] disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer transition-opacity"
-            title="Send"
+            title="Send (Enter)"
           >
             <Icon icon={isStreaming ? 'lucide:square' : 'lucide:send'} width={14} height={14} />
           </button>
