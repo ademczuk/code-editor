@@ -2,7 +2,7 @@
 
 ## Overview
 
-Code Editor includes a dedicated AI coding agent that operates as a full-stack expert pair programmer. The agent runs via the OpenClaw gateway in an isolated session, separate from other OpenClaw surfaces (Telegram, Discord, CodeFlow).
+Knot Code includes a dedicated AI coding agent that operates as a full-stack expert pair programmer. The agent runs via the OpenClaw gateway in an isolated session, separate from other OpenClaw surfaces (Telegram, Discord, CodeFlow).
 
 ## Session Architecture
 
@@ -13,7 +13,7 @@ Code Editor includes a dedicated AI coding agent that operates as a full-stack e
            │             │             │
     agent:main    agent:main:     agent:main:
     (Telegram)    codeflow         code-editor
-                  (CodeFlow)       (Code Editor)
+                  (CodeFlow)       (Knot Code)
 ```
 
 Each session maintains its own:

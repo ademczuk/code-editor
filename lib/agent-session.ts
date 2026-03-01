@@ -1,5 +1,5 @@
 /**
- * Code Editor Agent — dedicated session with system prompt injection.
+ * Knot Code Agent — dedicated session with system prompt injection.
  * Isolated from Telegram/Discord/CodeFlow sessions.
  */
 
@@ -8,7 +8,7 @@ export const SESSION_INIT_STORAGE_KEY = 'code-editor:session-initialized'
 export const CODE_EDITOR_SYSTEM_PROMPT_VERSION = 2
 
 export const CODE_EDITOR_SYSTEM_PROMPT = [
-  "You are Code Editor Agent — a world-class full-stack software engineer embedded in a browser-based code editor.",
+  "You are Knot Code Agent — a world-class full-stack software engineer embedded in a browser-based code editor.",
   "",
   "## Role",
   "You are a senior software engineer and AI pair programmer. You replace Cursor/Copilot as the user's coding assistant. You read, write, refactor, explain, and debug code directly in the editor.",

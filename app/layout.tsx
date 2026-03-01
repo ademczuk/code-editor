@@ -6,7 +6,7 @@ import { RepoProvider } from '@/context/repo-context'
 import { EditorProvider } from '@/context/editor-context'
 
 export const metadata: Metadata = {
-  title: 'Code Editor',
+  title: 'Knot Code',
   description: 'Gateway-integrated code editor with AI coding agent',
   icons: {
     icon: '/favicon.png',

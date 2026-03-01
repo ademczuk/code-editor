@@ -64,7 +64,7 @@ export function AgentPanel() {
     sendRequest('chat.inject', {
       sessionKey: CODE_EDITOR_SESSION_KEY,
       message: CODE_EDITOR_SYSTEM_PROMPT,
-      label: 'Code Editor system prompt',
+      label: 'Knot Code system prompt',
     }).then(() => {
       sessionInitRef.current = true
       if (typeof window !== 'undefined') {
@@ -77,7 +77,7 @@ export function AgentPanel() {
     // Label the session
     sendRequest('sessions.patch', {
       key: CODE_EDITOR_SESSION_KEY,
-      label: 'Code Editor Agent',
+      label: 'Knot Code Agent',
     }).catch(() => { /* non-fatal */ })
   }, [isConnected, sendRequest])
 

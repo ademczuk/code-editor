@@ -2,7 +2,7 @@
 
 ## Overview
 
-Code Editor ships as a native macOS desktop application via [Tauri v2](https://v2.tauri.app). Tauri wraps the system's native WebView (WebKit on macOS) instead of bundling Chromium, resulting in a ~10MB binary vs ~150MB for Electron.
+Knot Code ships as a native macOS desktop application via [Tauri v2](https://v2.tauri.app). Tauri wraps the system's native WebView (WebKit on macOS) instead of bundling Chromium, resulting in a ~10MB binary vs ~150MB for Electron.
 
 ## Architecture
 
@@ -85,7 +85,7 @@ Output location:
 ```
 src-tauri/target/release/bundle/
 ├── macos/
-│   └── Code Editor.app      # macOS application bundle
+│   └── Knot Code.app      # macOS application bundle
 └── dmg/
     └── Code Editor_0.1.0_aarch64.dmg  # Installer
 ```
@@ -96,7 +96,7 @@ src-tauri/target/release/bundle/
 
 ```json
 {
-  "productName": "Code Editor",
+  "productName": "Knot Code",
   "version": "0.1.0",
   "identifier": "ai.openknot.code-editor",
   "build": {
@@ -107,7 +107,7 @@ src-tauri/target/release/bundle/
   },
   "app": {
     "windows": [{
-      "title": "Code Editor",
+      "title": "Knot Code",
       "width": 1440,
       "height": 900,
       "minWidth": 800,

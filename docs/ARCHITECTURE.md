@@ -2,7 +2,7 @@
 
 ## Overview
 
-Code Editor is a **dual-target application** — it runs as a web app on Vercel and as a native macOS desktop app via Tauri. Both targets share the same Next.js codebase.
+Knot Code is a **dual-target application** — it runs as a web app on Vercel and as a native macOS desktop app via Tauri. Both targets share the same Next.js codebase.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -204,7 +204,7 @@ Three dedicated agent sessions prevent message cross-talk:
 |---|---|
 | `agent:main` | Nova (personal assistant via Telegram) |
 | `agent:main:codeflow` | CodeFlow PR maintainer |
-| `agent:main:code-editor` | Code Editor coding agent |
+| `agent:main:code-editor` | Knot Code coding agent |
 
 Each session has its own system prompt injected via `chat.inject` on first connect.
 

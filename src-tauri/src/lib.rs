@@ -15,8 +15,8 @@ pub fn run() {
         .manage(TerminalState::new())
         .setup(|app| {
             // ── Native Menu Bar ─────────────────────────────────
-            let app_menu = SubmenuBuilder::new(app, "Code Editor")
-                .item(&PredefinedMenuItem::about(app, Some("About Code Editor"), None)?)
+            let app_menu = SubmenuBuilder::new(app, "Knot Code")
+                .item(&PredefinedMenuItem::about(app, Some("About Knot Code"), None)?)
                 .separator()
                 .item(&PredefinedMenuItem::services(app, None)?)
                 .separator()
