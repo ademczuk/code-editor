@@ -43,6 +43,17 @@ export function CodeEditor() {
   const file = files.find(f => f.path === activeFile)
 
   const handleBeforeMount: BeforeMount = useCallback((monaco) => {
+    monaco.languages.typescript?.typescriptDefaults?.setCompilerOptions({
+      jsx: monaco.languages.typescript.JsxEmit.ReactJSX,
+      allowNonTsExtensions: true,
+      target: monaco.languages.typescript.ScriptTarget.ES2022,
+      moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+    })
+    monaco.languages.typescript?.javascriptDefaults?.setCompilerOptions({
+      jsx: monaco.languages.typescript.JsxEmit.ReactJSX,
+      allowNonTsExtensions: true,
+      target: monaco.languages.typescript.ScriptTarget.ES2022,
+    })
     // Disable red squiggly lines — Monaco has no tsconfig/types context
     monaco.languages.typescript?.typescriptDefaults?.setDiagnosticsOptions({
       noSemanticValidation: true,
@@ -203,6 +214,7 @@ export function CodeEditor() {
     monacoReady ? (
       <Editor
         key={file?.path}
+        path={file?.path}
         height="100%"
         defaultValue={file?.content}
         language={file?.language}
