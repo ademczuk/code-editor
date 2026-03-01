@@ -1,0 +1,225 @@
+'use client'
+
+import { useMemo, useState, useRef, useCallback, useEffect } from 'react'
+import { createPortal } from 'react-dom'
+import DOMPurify from 'dompurify'
+import { parse } from 'create-markdown'
+import { BlockRenderer } from 'create-markdown/react'
+interface MarkdownPreviewProps {
+  content: string
+  className?: string
+}
+
+const HEADING_MAP: Record<string, string> = {
+  h1: '# ', h2: '## ', h3: '### ', h4: '#### ', h5: '##### ', h6: '###### ',
+}
+
+/**
+ * Normalize mixed HTML+Markdown content into pure markdown
+ * so the block parser can handle it cleanly.
+ */
+function normalizeToMarkdown(raw: string): string {
+  let s = raw
+
+  // Strip HTML comments (single-line and multi-line)
+  s = s.replace(/<!--[\s\S]*?-->/g, '')
+
+  // Convert <h1>…</h6> to markdown headings
+  s = s.replace(/<(h[1-6])>([\s\S]*?)<\/\1>/gi, (_, tag, inner) => {
+    const prefix = HEADING_MAP[tag.toLowerCase()] ?? '### '
+    return `\n${prefix}${inner.trim()}\n`
+  })
+
+  // <strong> / <b> → **bold**
+  s = s.replace(/<(strong|b)>([\s\S]*?)<\/\1>/gi, '**$2**')
+
+  // <em> / <i> → *italic*
+  s = s.replace(/<(em|i)>([\s\S]*?)<\/\1>/gi, '*$2*')
+
+  // <code> → `code`
+  s = s.replace(/<code>([\s\S]*?)<\/code>/gi, '`$1`')
+
+  // <pre> wrapping <code> → fenced code block
+  s = s.replace(/<pre>\s*<code(?:\s+class="language-(\w+)")?>([\s\S]*?)<\/code>\s*<\/pre>/gi,
+    (_, lang, code) => `\n\`\`\`${lang ?? ''}\n${decodeHtmlEntities(code.trim())}\n\`\`\`\n`)
+
+  // <a href="...">text</a> → [text](href)
+  s = s.replace(/<a\s+href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, '[$2]($1)')
+
+  // <br> / <br/> → newline
+  s = s.replace(/<br\s*\/?>/gi, '\n')
+
+  // <hr> / <hr/> → ---
+  s = s.replace(/<hr\s*\/?>/gi, '\n---\n')
+
+  // <sub>…</sub> / <sup>…</sup> → plain text (no markdown equivalent)
+  s = s.replace(/<\/?(sub|sup)>/gi, '')
+
+  // <p>…</p> → unwrap into paragraphs
+  s = s.replace(/<p>([\s\S]*?)<\/p>/gi, '\n$1\n')
+
+  // <blockquote>…</blockquote> → > quoted
+  s = s.replace(/<blockquote>([\s\S]*?)<\/blockquote>/gi, (_, inner) => {
+    return inner.trim().split('\n').map((line: string) => `> ${line}`).join('\n') + '\n'
+  })
+
+  // <ul>/<ol> with <li> → markdown lists
+  s = s.replace(/<ul>([\s\S]*?)<\/ul>/gi, (_, inner) => {
+    return inner.replace(/<li>([\s\S]*?)<\/li>/gi, '- $1\n').trim() + '\n'
+  })
+  s = s.replace(/<ol>([\s\S]*?)<\/ol>/gi, (_, inner) => {
+    let idx = 0
+    return inner.replace(/<li>([\s\S]*?)<\/li>/gi, () => `${++idx}. `) + '\n'
+  })
+
+  // <img src="..." alt="..."> → ![alt](src)
+  s = s.replace(/<img\s+[^>]*src="([^"]*)"[^>]*alt="([^"]*)"[^>]*\/?>/gi, '![$2]($1)')
+  s = s.replace(/<img\s+[^>]*src="([^"]*)"[^>]*\/?>/gi, '![]($1)')
+
+  // Strip any remaining HTML tags
+  s = s.replace(/<\/?[a-z][a-z0-9]*\b[^>]*>/gi, '')
+
+  // Decode common HTML entities
+  s = decodeHtmlEntities(s)
+
+  // Convert @mentions to GitHub profile links (avoid matching inside emails)
+  s = s.replace(/(^|[\s(])@([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?)\b/gm,
+    '$1[@$2](https://github.com/$2)')
+
+  // Collapse 3+ consecutive blank lines to 2
+  s = s.replace(/\n{3,}/g, '\n\n')
+
+  return s.trim()
+}
+
+function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+}
+
+const MENTION_HREF_RE = /^https:\/\/github\.com\/([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?)$/
+
+type HoverTarget =
+  | { kind: 'mention'; login: string; rect: DOMRect }
+  | { kind: 'link'; url: string; rect: DOMRect }
+
+function classifyLink(el: HTMLElement): HoverTarget | null {
+  const anchor = el.closest?.('a') as HTMLAnchorElement | null
+  if (!anchor) return null
+  const href = anchor.getAttribute('href') ?? ''
+  const text = anchor.textContent ?? ''
+
+  if (text.startsWith('@')) {
+    const m = href.match(MENTION_HREF_RE)
+    if (m) return { kind: 'mention', login: m[1], rect: anchor.getBoundingClientRect() }
+  }
+
+  if (/^https?:\/\//.test(href)) {
+    return { kind: 'link', url: href, rect: anchor.getBoundingClientRect() }
+  }
+
+  return null
+}
+
+function FloatingCard({
+  target,
+  onMouseEnter,
+  onMouseLeave,
+}: {
+  target: HoverTarget
+  onMouseEnter: () => void
+  onMouseLeave: () => void
+}) {
+  const width = target.kind === 'link' ? 320 : 280
+  const above = target.rect.top > 300
+  const top = above ? target.rect.top - 8 : target.rect.bottom + 8
+  const left = Math.min(target.rect.left, (typeof window !== 'undefined' ? window.innerWidth : 1200) - width - 16)
+
+  return createPortal(
+    <div
+      style={{
+        position: 'fixed',
+        top,
+        left: Math.max(8, left),
+        width,
+        transform: above ? 'translateY(-100%)' : 'none',
+        zIndex: 9999,
+      }}
+      className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg-elevated)] p-4 shadow-lg animate-fade-in"
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      {target.kind === 'mention'? null: null
+      }
+    </div>,
+    document.body,
+  )
+}
+
+export function MarkdownPreview({ content, className }: MarkdownPreviewProps) {
+  const blocks = useMemo(() => {
+    const clean = typeof window !== 'undefined'
+      ? DOMPurify.sanitize(content, { ALLOWED_TAGS: [], KEEP_CONTENT: true })
+      : content.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    const normalized = normalizeToMarkdown(clean)
+    return parse(normalized)
+  }, [content])
+
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [hoverTarget, setHoverTarget] = useState<HoverTarget | null>(null)
+  const closeTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    el.querySelectorAll<HTMLAnchorElement>('a[href^="https://github.com/"]').forEach((a) => {
+      if (a.textContent?.startsWith('@') && MENTION_HREF_RE.test(a.getAttribute('href') ?? '')) {
+        a.classList.add('mention-link')
+      }
+    })
+  }, [blocks])
+
+  const scheduleClose = useCallback(() => {
+    clearTimeout(closeTimer.current)
+    closeTimer.current = setTimeout(() => setHoverTarget(null), 300)
+  }, [])
+
+  const cancelClose = useCallback(() => {
+    clearTimeout(closeTimer.current)
+  }, [])
+
+  const handlePointerOver = useCallback((e: React.PointerEvent) => {
+    const target = classifyLink(e.target as HTMLElement)
+    if (!target) return
+    cancelClose()
+    setHoverTarget(target)
+  }, [cancelClose])
+
+  const handlePointerOut = useCallback((e: React.PointerEvent) => {
+    const anchor = (e.target as HTMLElement).closest?.('a')
+    if (anchor) scheduleClose()
+  }, [scheduleClose])
+
+  return (
+    <div
+      ref={containerRef}
+      className={`md-preview ${className ?? ''}`}
+      onPointerOver={handlePointerOver}
+      onPointerOut={handlePointerOut}
+    >
+      <BlockRenderer blocks={blocks} />
+      {hoverTarget && (
+        <FloatingCard
+          target={hoverTarget}
+          onMouseEnter={cancelClose}
+          onMouseLeave={scheduleClose}
+        />
+      )}
+    </div>
+  )
+}
