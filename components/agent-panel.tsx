@@ -142,6 +142,10 @@ export function AgentPanel() {
   const [atMenuOpen, setAtMenuOpen] = useState(false)
   const [atQuery, setAtQuery] = useState('')
   const [atMenuIdx, setAtMenuIdx] = useState(0)
+  const [imageAttachments, setImageAttachments] = useState<Array<{ name: string; dataUrl: string }>>([])
+  const [modelInfo, setModelInfo] = useState<{ current: string; available: string[] }>({ current: '', available: [] })
+  const [modelMenuOpen, setModelMenuOpen] = useState(false)
+  const [contextTokens, setContextTokens] = useState(0)
   const [activeSuggestionIdx, setActiveSuggestionIdx] = useState(-1)
   const [sending, setSending] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
@@ -182,6 +186,34 @@ export function AgentPanel() {
   }, [atQuery, allFilePaths])
 
   const isConnected = status === 'connected'
+
+  // ─── Fetch model info from gateway ────────────────────────
+  useEffect(() => {
+    if (!isConnected) return
+    ;(async () => {
+      try {
+        // Get current session status for model info
+        const status = (await sendRequest('sessions.status', { sessionKey: CODE_EDITOR_SESSION_KEY })) as Record<string, unknown> | undefined
+        const model = (status?.model as string) || (status?.defaultModel as string) || ''
+        
+        // Get available models/agents
+        const agentsResp = (await sendRequest('agents.list', {})) as Record<string, unknown> | undefined
+        const agents = (agentsResp?.agents as Array<Record<string, unknown>>) || []
+        const models = agents.map(a => (a.model as string) || (a.id as string)).filter(Boolean).slice(0, 4)
+        
+        // Fallback: try config for default model
+        if (!models.length) {
+          const configResp = (await sendRequest('config.get', { key: 'defaultModel' })) as Record<string, unknown> | undefined
+          const defaultModel = configResp?.value as string
+          if (defaultModel) models.push(defaultModel)
+        }
+        
+        setModelInfo({ current: model || 'unknown', available: models.length ? models : [model || 'claude-sonnet-4-5'] })
+      } catch {
+        setModelInfo({ current: 'claude-sonnet-4-5', available: ['claude-sonnet-4-5'] })
+      }
+    })()
+  }, [isConnected, sendRequest])
 
   // ─── Session initialization (inject system prompt once) ───────
   useEffect(() => {
@@ -424,6 +456,61 @@ export function AgentPanel() {
     window.addEventListener('add-to-chat', handler)
     return () => window.removeEventListener('add-to-chat', handler)
   }, [])
+
+  // ─── Image handling (drag & drop, paste, file picker) ────
+  const handleImageDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))
+    for (const file of files.slice(0, 3)) {
+      const reader = new FileReader()
+      reader.onload = () => {
+        setImageAttachments(prev => [...prev, { name: file.name, dataUrl: reader.result as string }])
+      }
+      reader.readAsDataURL(file)
+    }
+  }, [])
+
+  const handleImagePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = Array.from(e.clipboardData.items).filter(i => i.type.startsWith('image/'))
+    if (items.length === 0) return
+    e.preventDefault()
+    for (const item of items.slice(0, 3)) {
+      const file = item.getAsFile()
+      if (!file) continue
+      const reader = new FileReader()
+      reader.onload = () => {
+        setImageAttachments(prev => [...prev, { name: `screenshot-${Date.now()}.png`, dataUrl: reader.result as string }])
+      }
+      reader.readAsDataURL(file)
+    }
+  }, [])
+
+  const handleImageSelect = useCallback(() => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.multiple = true
+    input.onchange = () => {
+      const files = Array.from(input.files || []).slice(0, 3)
+      for (const file of files) {
+        const reader = new FileReader()
+        reader.onload = () => {
+          setImageAttachments(prev => [...prev, { name: file.name, dataUrl: reader.result as string }])
+        }
+        reader.readAsDataURL(file)
+      }
+    }
+    input.click()
+  }, [])
+
+  // ─── Estimate context token usage ──────────────────────────
+  useEffect(() => {
+    const file = activeFile ? getFile(activeFile) : undefined
+    const fileTokens = file ? Math.ceil(Math.min(file.content.length, 8000) / 4) : 0
+    const attachTokens = contextAttachments.reduce((sum, a) => sum + Math.ceil(Math.min(a.content.length, 6000) / 4), 0)
+    const imageTokens = imageAttachments.length * 1000 // ~1k tokens per image estimate
+    setContextTokens(fileTokens + attachTokens + imageTokens)
+  }, [activeFile, getFile, contextAttachments, imageAttachments])
 
   // ─── Listen for set-agent-input events ─────────────────────
   useEffect(() => {
@@ -948,9 +1035,24 @@ export function AgentPanel() {
             </div>
           )}
 
-          {/* Context attachment chips */}
-          {contextAttachments.length > 0 && (
+          {/* Image + context attachment chips */}
+          {(contextAttachments.length > 0 || imageAttachments.length > 0) && (
             <div className="flex flex-wrap gap-1 mb-1.5">
+              {imageAttachments.map((img, i) => (
+                <span
+                  key={`img-${i}`}
+                  className="inline-flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 rounded-md bg-[color-mix(in_srgb,var(--warning,#eab308)_10%,transparent)] border border-[color-mix(in_srgb,var(--warning,#eab308)_25%,transparent)] text-[var(--warning,#eab308)]"
+                >
+                  <Icon icon="lucide:image" width={9} height={9} />
+                  {img.name.length > 20 ? img.name.slice(0, 17) + '...' : img.name}
+                  <button
+                    onClick={() => setImageAttachments(prev => prev.filter((_, j) => j !== i))}
+                    className="hover:text-[var(--text-primary)] cursor-pointer"
+                  >
+                    <Icon icon="lucide:x" width={8} height={8} />
+                  </button>
+                </span>
+              ))}
               {contextAttachments.map((att, i) => (
                 <span
                   key={i}
@@ -974,6 +1076,16 @@ export function AgentPanel() {
               ))}
             </div>
           )}
+
+          <div className="flex items-center gap-1 mb-1">
+            <button
+              onClick={handleImageSelect}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer"
+              title="Attach image"
+            >
+              <Icon icon="lucide:image-plus" width={11} height={11} />
+            </button>
+          </div>
 
           <textarea
             ref={inputRef}
@@ -1011,6 +1123,9 @@ export function AgentPanel() {
               }
               handleKeyDown(e)
             }}
+            onDrop={handleImageDrop}
+            onDragOver={e => e.preventDefault()}
+            onPaste={handleImagePaste}
             placeholder={activeFile ? `Ask about ${activeFile.split('/').pop()}...` : 'Ask or type /command...'}
             rows={1}
             className="w-full resize-none rounded-lg bg-[var(--bg-subtle)] border border-[var(--border)] px-3 py-2.5 pr-10 text-[12px] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none focus:border-[var(--brand)] focus:shadow-[0_0_0_1px_color-mix(in_srgb,var(--brand)_20%,transparent)] transition-all"
