@@ -89,6 +89,9 @@ export function AgentPanel() {
       const idempotencyKey = p.idempotencyKey as string | undefined
       const eventSessionKey = p.sessionKey as string | undefined
 
+      // Ignore inline-completion traffic (separate session)
+      if (idempotencyKey?.startsWith('completion-')) return
+
       // Match by idempotency key or session key fallback
       const matchesIdem = !!(idempotencyKey && sentKeysRef.current.has(idempotencyKey))
       const matchesSession = !idempotencyKey && eventSessionKey === CODE_EDITOR_SESSION_KEY
@@ -455,9 +458,11 @@ export function AgentPanel() {
 
   // ─── Render ───────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[var(--bg)]">
+    <div className="flex flex-col h-full overflow-hidden bg-[var(--sidebar-bg)]">
+      {/* Brand accent bar */}
+      <div className="h-[2px] shrink-0 bg-gradient-to-r from-transparent via-[var(--brand)] to-[color-mix(in_srgb,var(--brand)_50%,transparent)] opacity-70" />
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border)] shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[color-mix(in_srgb,var(--brand)_20%,var(--border))] bg-[color-mix(in_srgb,var(--brand)_4%,var(--sidebar-bg))] shrink-0">
         <div className="flex items-center gap-2">
           <Icon icon="lucide:sparkles" width={14} height={14} className="text-[var(--brand)]" />
           <span className="text-[12px] font-semibold text-[var(--text-primary)]">Agent</span>

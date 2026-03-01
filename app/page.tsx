@@ -5,6 +5,7 @@ import { Icon } from '@iconify/react'
 import { useGateway } from '@/context/gateway-context'
 import { useRepo } from '@/context/repo-context'
 import { useEditor } from '@/context/editor-context'
+import { useLocal, getRecentFolders } from '@/context/local-context'
 import { FileExplorer } from '@/components/file-explorer'
 import { EditorTabs } from '@/components/editor-tabs'
 import { CodeEditor } from '@/components/code-editor'
@@ -257,6 +258,7 @@ function EditorLayout() {
   const { repo } = useRepo()
   const { files, activeFile, openFile, closeFile, getFile, markClean } = useEditor()
   const { status } = useGateway()
+  const local = useLocal()
   const [explorerWidth, setExplorerWidth] = useState(240)
   const [agentWidth, setAgentWidth] = useState(360)
   const [agentOpen, setAgentOpen] = useState(false)
@@ -361,7 +363,42 @@ function EditorLayout() {
     return () => window.removeEventListener('save-file', handler)
   }, [repo, files])
 
-  // Handle file-select events from explorer
+  // Handle local file-select events
+  useEffect(() => {
+    if (!local.localMode) return
+    const handler = async (e: Event) => {
+      const { path } = (e as CustomEvent).detail
+      try {
+        const content = await local.readFile(path)
+        openFile(path, content, undefined, { kind: 'text' })
+      } catch (err) {
+        console.error('Failed to open local file:', err)
+      }
+    }
+    window.addEventListener('file-select', handler)
+    return () => window.removeEventListener('file-select', handler)
+  }, [local.localMode, local.readFile, openFile])
+
+  // Handle local save-file events
+  useEffect(() => {
+    if (!local.localMode) return
+    const handler = async (e: Event) => {
+      const { path } = (e as CustomEvent).detail
+      const file = files.find(f => f.path === path)
+      if (!file || !file.dirty) return
+      try {
+        await local.writeFile(path, file.content)
+        markClean(path)
+        await local.refresh()
+      } catch (err) {
+        console.error('Local save failed:', err)
+      }
+    }
+    window.addEventListener('save-file', handler)
+    return () => window.removeEventListener('save-file', handler)
+  }, [local.localMode, local.writeFile, local.refresh, files, markClean])
+
+  // Handle file-select events from explorer (GitHub mode)
   useEffect(() => {
     const handler = async (e: Event) => {
       const { path, sha } = (e as CustomEvent).detail
@@ -472,6 +509,34 @@ function EditorLayout() {
           <div className={isTauriDesktop ? 'tauri-no-drag' : ''}>
             <RepoSelector />
           </div>
+          {local.available && (
+            <div className={isTauriDesktop ? 'tauri-no-drag' : ''}>
+              {local.localMode ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="flex items-center gap-1 text-[11px] text-[var(--color-additions)]">
+                    <Icon icon="lucide:folder-open" width={12} height={12} />
+                    Local
+                  </span>
+                  <button
+                    onClick={local.exitLocalMode}
+                    className="text-[10px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] cursor-pointer"
+                    title="Switch to GitHub mode"
+                  >
+                    <Icon icon="lucide:x" width={12} height={12} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={local.openFolder}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer"
+                  title="Open local folder"
+                >
+                  <Icon icon="lucide:folder-open" width={13} height={13} />
+                  Open Folder
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -494,7 +559,7 @@ function EditorLayout() {
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* File Explorer */}
         {explorerVisible && (
-          <div className="shrink-0 bg-[var(--bg)] overflow-hidden" style={{ width: explorerWidth }}>
+          <div className="shrink-0 bg-[var(--sidebar-bg)] overflow-hidden border-r border-[color-mix(in_srgb,var(--brand)_28%,var(--border))]" style={{ width: explorerWidth }}>
             <FileExplorer />
           </div>
         )}
@@ -558,7 +623,7 @@ function EditorLayout() {
         {agentOpen && (
           <>
             <ResizeHandle direction="horizontal" onResize={handleAgentResize} />
-            <div className="shrink-0 flex flex-col overflow-hidden border-l border-[var(--border)]" style={{ width: agentWidth }}>
+            <div className="shrink-0 flex flex-col overflow-hidden border-l-2 border-[color-mix(in_srgb,var(--brand)_40%,var(--border))]" style={{ width: agentWidth }}>
               <div className="flex-1 min-h-0 overflow-hidden">
                 <AgentPanel />
               </div>
@@ -645,8 +710,14 @@ function EditorLayout() {
       {/* Status bar */}
       <footer className="flex items-center justify-between px-3 h-6 border-t border-[var(--border)] bg-[var(--bg-elevated)] text-[9px] text-[var(--text-tertiary)] shrink-0">
         <div className="flex items-center gap-3">
-          {repo && <span className="font-mono">{repo.fullName}</span>}
-          {repo && <span>{repo.branch}</span>}
+          {local.localMode && local.rootPath && (
+            <span className="font-mono">{local.rootPath.split('/').pop()}</span>
+          )}
+          {local.localMode && local.gitInfo?.is_repo && (
+            <span>{local.gitInfo.branch}</span>
+          )}
+          {!local.localMode && repo && <span className="font-mono">{repo.fullName}</span>}
+          {!local.localMode && repo && <span>{repo.branch}</span>}
           {dirtyCount > 0 && (
             <button
               onClick={() => setChangesVisible(true)}
@@ -688,6 +759,7 @@ function EditorLayout() {
 
 export default function EditorPage() {
   const { status } = useGateway()
+  const local = useLocal()
 
   if (status !== 'connected') {
     return <GatewayLogin />

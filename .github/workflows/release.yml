@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release-macos:
+    name: Build macOS DMG
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install Rust (stable + universal Apple targets)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Rust build cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── Code signing (skip gracefully when secrets are absent) ────────────
+      - name: Import Apple Developer certificate
+        if: env.APPLE_CERTIFICATE != ''
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain
+          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+          echo -n "$APPLE_CERTIFICATE" | base64 --decode -o "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+      # ── Build ─────────────────────────────────────────────────────────────
+      - name: Build universal DMG (arm64 + x86_64)
+        env:
+          # Tauri updater key (optional — set to skip updater signing)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Apple code signing (optional — leave unset to build unsigned)
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # Apple notarization (optional — requires signing identity)
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: pnpm tauri build --target universal-apple-darwin
+
+      # ── Locate artefact ───────────────────────────────────────────────────
+      - name: Locate DMG
+        id: dmg
+        run: |
+          DMG=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name '*.dmg' | head -n 1)
+          echo "path=$DMG" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$DMG")" >> "$GITHUB_OUTPUT"
+
+      # ── Upload artefact (always — useful for inspection) ──────────────────
+      - name: Upload DMG artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.dmg.outputs.name }}
+          path: ${{ steps.dmg.outputs.path }}
+          if-no-files-found: error
+
+      # ── Create a DRAFT release (assets are private until published) ───────
+      - name: Create draft GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: Knot Code ${{ github.ref_name }}
+          files: ${{ steps.dmg.outputs.path }}
+          generate_release_notes: true
+          body: |
+            ## Knot Code ${{ github.ref_name }}
+
+            > **Sponsor-only download.**
+            > Verify your [GitHub Sponsorship](https://github.com/sponsors/openknots) at
+            > https://openknot.ai/download to receive the download link.
+
+            See the auto-generated changelog below for what's new.

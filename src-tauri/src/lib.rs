@@ -1,4 +1,5 @@
 mod engine;
+mod local_fs;
 mod terminal;
 
 use terminal::TerminalState;
@@ -11,6 +12,7 @@ use tauri::{
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .manage(TerminalState::new())
         .setup(|app| {
@@ -177,6 +179,14 @@ pub fn run() {
             engine::engine_start,
             engine::engine_stop,
             engine::engine_restart,
+            // Local filesystem commands
+            local_fs::local_read_tree,
+            local_fs::local_read_file,
+            local_fs::local_write_file,
+            local_fs::local_git_info,
+            local_fs::local_git_diff,
+            local_fs::local_git_commit,
+            local_fs::local_git_branches,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

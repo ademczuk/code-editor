@@ -4,6 +4,7 @@ import { ThemeProvider } from '@/context/theme-context'
 import { GatewayProvider } from '@/context/gateway-context'
 import { RepoProvider } from '@/context/repo-context'
 import { EditorProvider } from '@/context/editor-context'
+import { LocalProvider } from '@/context/local-context'
 
 export const metadata: Metadata = {
   title: 'Knot Code',
@@ -22,7 +23,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <GatewayProvider>
             <RepoProvider>
               <EditorProvider>
-                {children}
+                <LocalProvider>
+                  {children}
+                </LocalProvider>
               </EditorProvider>
             </RepoProvider>
           </GatewayProvider>

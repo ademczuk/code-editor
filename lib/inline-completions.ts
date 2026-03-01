@@ -11,7 +11,7 @@ interface GatewaySend {
   (method: string, params: Record<string, unknown>): Promise<unknown>
 }
 
-const SESSION_KEY = 'agent:main:code-editor'
+const SESSION_KEY = 'agent:completions:code-editor'
 const DEBOUNCE_MS = 600
 const MAX_CONTEXT_LINES = 15
 const MAX_COMPLETION_CHARS = 500

@@ -9,7 +9,8 @@
     "start": "next start",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "release": "node scripts/release.mjs"
   },
   "dependencies": {
     "@iconify/react": "^6.0.2",
@@ -18,6 +19,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@tailwindcss/postcss": "^4.2.1",
     "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-dialog": "^2.6.0",
     "@tauri-apps/plugin-window-state": "^2.4.1",
     "@types/dompurify": "^3.2.0",
     "@types/node": "^25.3.3",

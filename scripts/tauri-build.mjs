@@ -22,6 +22,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SERVER_ROUTES = [
   [resolve(root, 'app/api'),      resolve(root, '.tauri-api-tmp')],
   [resolve(root, 'app/callback'), resolve(root, '.tauri-callback-tmp')],
+  [resolve(root, 'app/download'), resolve(root, '.tauri-download-tmp')],
 ]
 
 function hide() {

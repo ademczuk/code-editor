@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { useRepo, type TreeNode } from '@/context/repo-context'
 import { useEditor } from '@/context/editor-context'
+import { useLocal } from '@/context/local-context'
 
 // ─── File icon mapping ──────────────────────────────────────────
 
@@ -154,24 +155,37 @@ function FileItem({ file, depth }: { file: TreeFile; depth: number }) {
 
 export function FileExplorer() {
   const { repo, tree, treeLoading, treeError, loadTree } = useRepo()
+  const local = useLocal()
+
+  // Convert local tree entries to TreeNode format for unified rendering
+  const effectiveTree: TreeNode[] = useMemo(() => {
+    if (local.localMode && local.localTree.length > 0) {
+      return local.localTree.map(e => ({
+        path: e.path,
+        type: e.is_dir ? 'tree' as const : 'blob' as const,
+        sha: '',
+      }))
+    }
+    return tree
+  }, [local.localMode, local.localTree, tree])
   const [search, setSearch] = useState('')
 
   useEffect(() => {
     if (repo) loadTree()
   }, [repo, loadTree])
 
-  const treeNodes = useMemo(() => buildTree(tree), [tree])
+  const treeNodes = useMemo(() => buildTree(effectiveTree), [effectiveTree])
 
   const filteredTree = useMemo(() => {
     if (!search.trim()) return treeNodes
     const term = search.toLowerCase()
-    const matches = tree.filter(n => n.type === 'blob' && n.path.toLowerCase().includes(term))
+    const matches = effectiveTree.filter(n => n.type === 'blob' && n.path.toLowerCase().includes(term))
     return buildTree(matches)
-  }, [tree, treeNodes, search])
+  }, [effectiveTree, treeNodes, search])
 
   if (!repo) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-4">
+      <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-[var(--sidebar-bg)]">
         <Icon icon="lucide:folder-open" width={32} height={32} className="text-[var(--text-tertiary)] mb-3" />
         <p className="text-[12px] text-[var(--text-secondary)]">No repo selected</p>
         <p className="text-[10px] text-[var(--text-tertiary)] mt-1">Select a repository to explore</p>
@@ -180,16 +194,19 @@ export function FileExplorer() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-[var(--sidebar-bg)]">
+      {/* Brand accent bar */}
+      <div className="h-[2px] shrink-0 bg-gradient-to-r from-[var(--brand)] via-[color-mix(in_srgb,var(--brand)_50%,transparent)] to-transparent opacity-70" />
       {/* Header */}
-      <div className="px-3 py-2 border-b border-[var(--border)] shrink-0">
+      <div className="px-3 py-2 border-b border-[color-mix(in_srgb,var(--brand)_20%,var(--border))] bg-[color-mix(in_srgb,var(--brand)_4%,var(--sidebar-bg))] shrink-0">
         <div className="flex items-center justify-between gap-2">
           <span className="text-[11px] font-semibold text-[var(--text-primary)] truncate uppercase tracking-wider">
             Explorer
           </span>
           <button
-            onClick={loadTree}
+            
             disabled={treeLoading}
+            onClick={() => local.localMode ? local.refresh() : loadTree()}
             className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
             title="Refresh"
           >
@@ -210,7 +227,7 @@ export function FileExplorer() {
 
       {/* Tree */}
       <div className="flex-1 overflow-y-auto py-1">
-        {treeLoading && tree.length === 0 && (
+        {treeLoading && effectiveTree.length === 0 && (
           <div className="flex items-center gap-2 px-3 py-4 text-[11px] text-[var(--text-secondary)]">
             <Icon icon="lucide:loader-2" width={14} height={14} className="animate-spin text-[var(--brand)]" />
             Loading tree...
