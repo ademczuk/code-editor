@@ -32,19 +32,21 @@ const Landing = dynamic(() => import('@/components/landing'), { ssr: false })
 const TerminalPanel = dynamic(() => import('@/components/terminal-panel').then(m => ({ default: m.TerminalPanel })), { ssr: false })
 const PreviewPanel = dynamic(() => import('@/components/preview/preview-panel').then(m => ({ default: m.PreviewPanel })), { ssr: false })
 const ComponentIsolatorListener = dynamic(() => import('@/components/preview/component-isolator').then(m => ({ default: m.ComponentIsolatorListener })), { ssr: false })
+const WorkflowView = dynamic(() => import('@/components/workflows/workflow-view').then(m => ({ default: m.WorkflowView })), { ssr: false })
 const PipWindow = dynamic(() => import('@/components/preview/pip-window').then(m => ({ default: m.PipWindow })), { ssr: false })
 
 const VIEW_ICONS: Record<ViewId, { icon: string; label: string }> = {
   chat: { icon: 'lucide:message-square', label: 'Chat' },
   editor: { icon: 'lucide:code-2', label: 'Editor' },
   preview: { icon: 'lucide:eye', label: 'Preview' },
+  workflows: { icon: 'lucide:workflow', label: 'Workflows' },
   diff: { icon: 'lucide:git-compare', label: 'Diff' },
   git: { icon: 'lucide:git-branch', label: 'Git' },
   prs: { icon: 'lucide:git-pull-request', label: 'PRs' },
   settings: { icon: 'lucide:settings', label: 'Settings' },
 }
 
-const VISIBLE_VIEWS: ViewId[] = ['chat', 'editor', 'preview', 'git', 'prs']
+const VISIBLE_VIEWS: ViewId[] = ['chat', 'editor', 'preview', 'workflows', 'git', 'prs']
 
 export default function EditorLayout() {
   const { status } = useGateway()
@@ -291,7 +293,7 @@ export default function EditorLayout() {
   }
 
   return (
-    <div className="flex h-full w-full bg-[var(--bg)] text-[var(--text-primary)] overflow-hidden">
+    <div className="flex h-full w-full bg-[var(--bg)] text-[var(--text-primary)] overflow-hidden gap-1.5 p-1.5">
       {/* Tauri drag region */}
       {isTauriDesktop && (
         <div data-tauri-drag-region className="tauri-drag-region fixed top-0 left-0 right-0 h-10 z-[9999] pointer-events-none" />
@@ -309,7 +311,7 @@ export default function EditorLayout() {
       />
 
       {/* Main content area */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 rounded-xl overflow-hidden border border-[var(--border)]">
         {/* View navigation bar */}
         <div data-tauri-drag-region className={`flex items-center h-10 border-b border-[var(--border)] bg-[var(--bg-elevated)] shrink-0 px-2.5 gap-1 tauri-drag-region ${isMacTauri && sidebarCollapsed ? 'pl-20' : ''}`}>
           {/* View tabs with sliding indicator */}
@@ -358,6 +360,7 @@ export default function EditorLayout() {
             {activeView === 'chat' && <ChatView />}
             {activeView === 'editor' && <EditorView />}
             {activeView === 'preview' && <PreviewPanel />}
+            {activeView === 'workflows' && <WorkflowView />}
             {activeView === 'git' && <GitView />}
             {activeView === 'prs' && <PrView />}
             {activeView === 'settings' && (

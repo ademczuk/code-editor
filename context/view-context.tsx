@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
 
-export type ViewId = 'chat' | 'editor' | 'preview' | 'diff' | 'git' | 'prs' | 'settings'
+export type ViewId = 'chat' | 'editor' | 'preview' | 'workflows' | 'diff' | 'git' | 'prs' | 'settings'
 
 interface ViewState {
   activeView: ViewId

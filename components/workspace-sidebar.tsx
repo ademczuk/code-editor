@@ -142,7 +142,7 @@ export function WorkspaceSidebar({ activeId, onSelect, onNew, onDelete, collapse
   /* ── Collapsed ────────────────────────────────────────────── */
   if (collapsed) {
     return (
-      <div className={`flex flex-col items-center gap-3 w-[48px] bg-[var(--sidebar-bg)] border-r border-[var(--border)] shrink-0 transition-all duration-200 ${isTauriDesktop ? 'pt-8' : 'pt-3'} pb-3`}>
+      <div className={`flex flex-col items-center gap-3 w-[48px] bg-[var(--sidebar-bg)] border border-[var(--border)] rounded-xl shrink-0 transition-all duration-200 ${isTauriDesktop ? 'pt-8' : 'pt-3'} pb-3`}>
         <button onClick={onToggle} className="p-2 rounded-md hover:bg-[var(--bg-subtle)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors cursor-pointer" title="Expand sidebar (⌘\\)">
           <Icon icon="lucide:panel-left" width={18} height={18} />
         </button>
@@ -215,7 +215,7 @@ export function WorkspaceSidebar({ activeId, onSelect, onNew, onDelete, collapse
   return (
     <div
       ref={sidebarRef}
-      className="relative flex flex-col h-full bg-[var(--sidebar-bg)] border-r border-[var(--border)] overflow-hidden transition-[width] duration-200 shrink-0"
+      className="relative flex flex-col h-full bg-[var(--sidebar-bg)] border border-[var(--border)] rounded-xl overflow-hidden transition-[width] duration-200 shrink-0"
       style={{ width: sidebarWidth }}
     >
       {/* Branding + Header */}
