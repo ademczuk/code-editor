@@ -48,6 +48,9 @@ interface LocalContextValue {
   unstageFiles: (paths: string[]) => Promise<void>
   hasUpstream: () => Promise<boolean>
   undoLastCommit: () => Promise<void>
+  gitSave: (message: string) => Promise<string>
+  gitSync: () => Promise<string>
+  gitCleanBranches: () => Promise<string>
   discardChanges: (paths: string[]) => Promise<void>
   discardStagedChanges: (paths: string[]) => Promise<void>
   branches: string[]
@@ -344,6 +347,26 @@ export function LocalProvider({ children }: { children: ReactNode }) {
     await refresh()
   }, [desktop, rootPath, refresh])
 
+  const gitSave = useCallback(async (message: string): Promise<string> => {
+    if (!rootPath) throw new Error('No root path')
+    const result = await tauriInvoke<string>('local_git_save', { root: rootPath, message }) ?? 'Saved'
+    await refresh()
+    return result
+  }, [rootPath, refresh])
+
+  const gitSync = useCallback(async (): Promise<string> => {
+    if (!rootPath) throw new Error('No root path')
+    const result = await tauriInvoke<string>('local_git_sync', { root: rootPath }) ?? 'Synced'
+    await refresh()
+    return result
+  }, [rootPath, refresh])
+
+  const gitCleanBranches = useCallback(async (): Promise<string> => {
+    if (!rootPath) throw new Error('No root path')
+    const result = await tauriInvoke<string>('local_git_clean_branches', { root: rootPath }) ?? 'Cleaned'
+    return result
+  }, [rootPath])
+
   const discardChanges = useCallback(async (paths: string[]) => {
     if (!rootPath) throw new Error('No root path')
     // git checkout -- <paths> (discard unstaged changes)
@@ -400,11 +423,11 @@ export function LocalProvider({ children }: { children: ReactNode }) {
     available: true, isWebFS, remoteRepo, aheadBehind,
     openFolder, setRootPath, exitLocalMode,
     readFile, readFileBase64, writeFile, deletePath, refresh, commitFiles, getDiff,
-    unstageFiles, undoLastCommit, discardChanges, discardStagedChanges, switchBranch, push, gitLog, refreshAheadBehind, hasUpstream,
+    unstageFiles, undoLastCommit, discardChanges, discardStagedChanges, gitSave, gitSync, gitCleanBranches, switchBranch, push, gitLog, refreshAheadBehind, hasUpstream,
   }), [localMode, rootPath, localTree, gitInfo, branches, isWebFS, remoteRepo, aheadBehind,
     openFolder, setRootPath, exitLocalMode,
     readFile, readFileBase64, writeFile, deletePath, refresh, commitFiles, getDiff,
-    unstageFiles, undoLastCommit, discardChanges, discardStagedChanges, switchBranch, push, gitLog, refreshAheadBehind, hasUpstream])
+    unstageFiles, undoLastCommit, discardChanges, discardStagedChanges, gitSave, gitSync, gitCleanBranches, switchBranch, push, gitLog, refreshAheadBehind, hasUpstream])
 
   return (
     <LocalContext.Provider value={value}>

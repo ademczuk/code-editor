@@ -295,6 +295,50 @@ pub fn local_git_push(root: String, branch: String, set_upstream: bool) -> Resul
     }
 }
 
+/// gq sync: pull --rebase then push
+#[tauri::command]
+pub fn local_git_sync(root: String) -> Result<String, String> {
+    let branch = run_git(&root, &["rev-parse", "--abbrev-ref", "HEAD"])?;
+    let branch = branch.trim();
+    run_git(&root, &["pull", "--rebase", "origin", branch])?;
+    run_git(&root, &["push", "origin", branch])?;
+    Ok(format!("Synced {}", branch))
+}
+
+/// gq save: add all + commit + push
+#[tauri::command]
+pub fn local_git_save(root: String, message: String) -> Result<String, String> {
+    let branch = run_git(&root, &["rev-parse", "--abbrev-ref", "HEAD"])?;
+    let branch = branch.trim();
+    run_git(&root, &["add", "-A"])?;
+    run_git(&root, &["commit", "-m", &message])?;
+    run_git(&root, &["push", "origin", branch])?;
+    Ok(format!("Saved and pushed to {}", branch))
+}
+
+/// gq clean: delete merged branches (except main/master/current)
+#[tauri::command]
+pub fn local_git_clean_branches(root: String) -> Result<String, String> {
+    let merged = run_git(&root, &["branch", "--merged"])?;
+    let current = run_git(&root, &["rev-parse", "--abbrev-ref", "HEAD"])?;
+    let current = current.trim();
+    let mut deleted = Vec::new();
+    for line in merged.lines() {
+        let branch = line.trim().trim_start_matches("* ");
+        if branch.is_empty() || branch == "main" || branch == "master" || branch == current {
+            continue;
+        }
+        if run_git(&root, &["branch", "-d", branch]).is_ok() {
+            deleted.push(branch.to_string());
+        }
+    }
+    if deleted.is_empty() {
+        Ok("No merged branches to clean".to_string())
+    } else {
+        Ok(format!("Deleted: {}", deleted.join(", ")))
+    }
+}
+
 #[derive(Clone, Serialize)]
 pub struct GitLogEntry {
     pub hash: String,

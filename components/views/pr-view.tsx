@@ -5,6 +5,7 @@ import { Icon } from '@iconify/react'
 import { useRepo } from '@/context/repo-context'
 import { useView } from '@/context/view-context'
 import { useLocal } from '@/context/local-context'
+import { MarkdownPreview } from '@/components/markdown-preview'
 import {
   fetchPullRequests,
   fetchPullRequest,
@@ -29,7 +30,8 @@ import {
 
 type RightPanel = 'empty' | 'detail' | 'create'
 type MergeMethod = 'merge' | 'squash' | 'rebase'
-type DetailTab = 'files' | 'conversation' | 'checks' | 'reviews'
+type DetailTab = 'workflow' | 'files' | 'conversation' | 'checks' | 'reviews'
+type FindingSeverity = 'BLOCKER' | 'IMPORTANT' | 'MINOR' | 'NOTE'
 
 function timeAgo(dateStr: string): string {
   const s = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000)
@@ -110,6 +112,31 @@ function statusBadge(pr: PullRequestSummary): { label: string; bg: string; fg: s
   return { label: 'Open', bg: 'bg-[color-mix(in_srgb,var(--color-additions)_12%,transparent)]', fg: 'text-[var(--color-additions)]' }
 }
 
+function extractSeverity(text: string | null | undefined): FindingSeverity | null {
+  if (!text) return null
+  const m = text.match(/\b(BLOCKER|IMPORTANT|MINOR|NOTE)\b/i)
+  if (!m) return null
+  return m[1].toUpperCase() as FindingSeverity
+}
+
+function severityWeight(s: FindingSeverity): number {
+  switch (s) {
+    case 'BLOCKER': return 4
+    case 'IMPORTANT': return 3
+    case 'MINOR': return 2
+    case 'NOTE': return 1
+  }
+}
+
+function severityTone(s: FindingSeverity): string {
+  switch (s) {
+    case 'BLOCKER': return 'text-[var(--color-deletions)] bg-[color-mix(in_srgb,var(--color-deletions)_12%,transparent)] border-[color-mix(in_srgb,var(--color-deletions)_30%,transparent)]'
+    case 'IMPORTANT': return 'text-[var(--warning,#eab308)] bg-[color-mix(in_srgb,var(--warning,#eab308)_12%,transparent)] border-[color-mix(in_srgb,var(--warning,#eab308)_30%,transparent)]'
+    case 'MINOR': return 'text-[var(--text-secondary)] bg-[var(--bg-subtle)] border-[var(--border)]'
+    case 'NOTE': return 'text-[var(--text-tertiary)] bg-[var(--bg-subtle)] border-[var(--border)]'
+  }
+}
+
 export function PrView() {
   const { repo } = useRepo()
   const { goBack } = useView()
@@ -119,6 +146,7 @@ export function PrView() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'open' | 'closed' | 'all'>('open')
   const [search, setSearch] = useState('')
+  const [labelFilter, setLabelFilter] = useState<string>('all')
 
   const [rightPanel, setRightPanel] = useState<RightPanel>('empty')
   const [selectedPr, setSelectedPr] = useState<PullRequestSummary | null>(null)
@@ -148,7 +176,7 @@ export function PrView() {
   const [reviews, setReviews] = useState<PRReview[]>([])
   const [checks, setChecks] = useState<CheckRun[]>([])
   const [loadingExtra, setLoadingExtra] = useState(false)
-  const [detailTab, setDetailTab] = useState<DetailTab>('files')
+  const [detailTab, setDetailTab] = useState<DetailTab>('workflow')
 
   // Close PR state
   const [closing, setClosing] = useState(false)
@@ -165,6 +193,11 @@ export function PrView() {
   const [posting, setPosting] = useState(false)
 
   const branchName = local.gitInfo?.branch || repo?.branch || 'main'
+  const preferredBaseBranch = useMemo(() => {
+    if (branches.includes('main')) return 'main'
+    if (repo?.branch && branches.includes(repo.branch)) return repo.branch
+    return branches[0] || 'main'
+  }, [branches, repo?.branch])
 
   const loadPrs = useCallback(async () => {
     if (!repo) return
@@ -212,7 +245,7 @@ export function PrView() {
     setMergeSuccess(false)
     setCloseError(null)
     setEditing(false)
-    setDetailTab('files')
+    setDetailTab('workflow')
     setLoadingFiles(true)
     setLoadingExtra(true)
     try {
@@ -326,7 +359,7 @@ export function PrView() {
     setSelectedPr(null)
     setActiveFile(null)
     setCreateHead(branchName)
-    setCreateBase('main')
+    setCreateBase(preferredBaseBranch)
     setCreateTitle('')
     setCreateBody('')
     setCreateDraft(false)
@@ -340,15 +373,27 @@ export function PrView() {
     setEditing(true)
   }
 
+  const availableLabels = useMemo(() => {
+    const set = new Set<string>()
+    prs.forEach(pr => pr.labels.forEach(l => set.add(l.name)))
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [prs])
+
   const filteredPrs = useMemo(() => {
-    if (!search.trim()) return prs
-    const q = search.toLowerCase()
-    return prs.filter(pr =>
-      pr.title.toLowerCase().includes(q) ||
-      pr.author.toLowerCase().includes(q) ||
-      `#${pr.number}`.includes(q)
-    )
-  }, [prs, search])
+    const q = search.trim().toLowerCase()
+    return prs.filter(pr => {
+      const matchesSearch = !q ||
+        pr.title.toLowerCase().includes(q) ||
+        pr.author.toLowerCase().includes(q) ||
+        `#${pr.number}`.includes(q)
+      const matchesLabel = labelFilter === 'all' || pr.labels.some(l => l.name === labelFilter)
+      return matchesSearch && matchesLabel
+    })
+  }, [prs, search, labelFilter])
+
+  useEffect(() => {
+    if (labelFilter !== 'all' && !availableLabels.includes(labelFilter)) setLabelFilter('all')
+  }, [availableLabels, labelFilter])
 
   const openCount = useMemo(() => filter === 'open' ? prs.length : 0, [prs, filter])
 
@@ -381,6 +426,93 @@ export function PrView() {
     }
   }, [checks])
 
+  const maintainerFindings = useMemo(() => {
+    const fromIssue = comments
+      .map(c => ({
+        id: `issue-${c.id}`,
+        author: c.user.login,
+        body: c.body,
+        createdAt: c.created_at,
+        source: 'conversation' as const,
+        severity: extractSeverity(c.body),
+      }))
+      .filter(f => !!f.severity)
+
+    const fromReviewComments = reviewComments
+      .map(c => ({
+        id: `review-comment-${c.id}`,
+        author: c.user.login,
+        body: c.body,
+        createdAt: c.created_at,
+        source: `file:${c.path}` as const,
+        severity: extractSeverity(c.body),
+      }))
+      .filter(f => !!f.severity)
+
+    const fromReviews = reviews
+      .map(r => ({
+        id: `review-${r.id}`,
+        author: r.user.login,
+        body: r.body ?? '',
+        createdAt: r.submitted_at,
+        source: 'review' as const,
+        severity: extractSeverity(r.body),
+      }))
+      .filter(f => !!f.severity)
+
+    const all = [...fromIssue, ...fromReviewComments, ...fromReviews]
+      .map(f => ({ ...f, severity: f.severity as FindingSeverity }))
+      .sort((a, b) => {
+        const sw = severityWeight(b.severity) - severityWeight(a.severity)
+        if (sw !== 0) return sw
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      })
+
+    const counts = {
+      BLOCKER: all.filter(f => f.severity === 'BLOCKER').length,
+      IMPORTANT: all.filter(f => f.severity === 'IMPORTANT').length,
+      MINOR: all.filter(f => f.severity === 'MINOR').length,
+      NOTE: all.filter(f => f.severity === 'NOTE').length,
+    }
+
+    return { all, counts }
+  }, [comments, reviewComments, reviews])
+
+  const maintainerWorkflow = useMemo(() => {
+    const hasApproval = reviewSummary.approved > 0
+    const checksGreen = checksSummary.failed === 0 && checksSummary.pending === 0
+    const hasBlockers = maintainerFindings.counts.BLOCKER > 0
+    const hasImportant = maintainerFindings.counts.IMPORTANT > 0
+
+    const reviewReady = !hasBlockers
+    const prepareReady = reviewReady && !hasImportant && !selectedPr?.draft
+    const mergeReady = prepareReady && hasApproval && checksGreen && selectedPr?.state === 'open' && !selectedPr?.merged
+
+    const verdict: 'ready' | 'needs-work' | 'needs-discussion' = hasBlockers
+      ? 'needs-work'
+      : hasImportant
+        ? 'needs-discussion'
+        : mergeReady
+          ? 'ready'
+          : 'needs-discussion'
+
+    return {
+      reviewReady,
+      prepareReady,
+      mergeReady,
+      hasApproval,
+      checksGreen,
+      verdict,
+      blockers: [
+        ...(hasBlockers ? [`${maintainerFindings.counts.BLOCKER} BLOCKER finding(s) unresolved`] : []),
+        ...(!hasApproval ? ['At least one APPROVED review required'] : []),
+        ...(checksSummary.failed > 0 ? ['Fix failing checks before merge'] : []),
+        ...(checksSummary.pending > 0 ? ['Wait for CI checks to finish'] : []),
+        ...(selectedPr?.draft ? ['Mark PR ready for review (currently draft)'] : []),
+      ],
+    }
+  }, [reviewSummary, checksSummary, maintainerFindings, selectedPr])
+
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">
       {/* Left panel -- PR list */}
@@ -412,10 +544,32 @@ export function PrView() {
           ))}
         </div>
 
-        <div className="px-2 py-1.5 border-b border-[var(--border)] shrink-0">
+        <div className="px-2 py-1.5 border-b border-[var(--border)] shrink-0 space-y-1.5">
           <div className="relative">
             <Icon icon="lucide:search" width={12} height={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-disabled)]" />
             <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter pull requests..." className="w-full h-[26px] pl-7 pr-2 text-[11px] rounded-[var(--radius-sm)] bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] outline-none focus:border-[var(--border-focus)] transition-colors" />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Icon icon="lucide:tag" width={10} height={10} className="text-[var(--text-disabled)]" />
+            <select
+              value={labelFilter}
+              onChange={e => setLabelFilter(e.target.value)}
+              className="flex-1 h-[24px] px-2 text-[10px] rounded-[var(--radius-sm)] bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-secondary)] outline-none focus:border-[var(--border-focus)] cursor-pointer"
+            >
+              <option value="all">All labels</option>
+              {availableLabels.map(label => (
+                <option key={label} value={label}>{label}</option>
+              ))}
+            </select>
+            {labelFilter !== 'all' && (
+              <button
+                onClick={() => setLabelFilter('all')}
+                className="h-[24px] px-1.5 rounded-[var(--radius-sm)] text-[10px] text-[var(--text-tertiary)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                title="Clear label filter"
+              >
+                Clear
+              </button>
+            )}
           </div>
         </div>
 
@@ -470,7 +624,7 @@ export function PrView() {
       <div className="flex-1 flex flex-col bg-[var(--bg-elevated)] overflow-hidden">
         {rightPanel === 'create' ? (
           <CreatePrForm
-            branches={branches} defaultHead={branchName} defaultBase="main"
+            branches={branches} defaultHead={branchName} defaultBase={preferredBaseBranch}
             head={createHead} base={createBase} title={createTitle} body={createBody}
             draft={createDraft} creating={creating} error={createError}
             onHeadChange={setCreateHead} onBaseChange={setCreateBase}
@@ -513,8 +667,9 @@ export function PrView() {
               {/* Detail tabs */}
               <div className="flex items-center h-[32px] border-b border-[var(--border)] bg-[var(--bg)] px-2 shrink-0 gap-0.5">
                 {([
+                  { id: 'workflow' as const, label: 'Workflow', icon: 'lucide:workflow', count: maintainerFindings.all.length },
                   { id: 'files' as const, label: 'Files', icon: 'lucide:files', count: prFiles.length },
-                  { id: 'conversation' as const, label: 'Conversation', icon: 'lucide:message-circle', count: comments.length },
+                  { id: 'conversation' as const, label: 'Conversation', icon: 'lucide:message-circle', count: comments.length + reviewComments.length },
                   { id: 'reviews' as const, label: 'Reviews', icon: 'lucide:eye', count: reviews.filter(r => r.state !== 'COMMENTED' && r.state !== 'PENDING').length },
                   { id: 'checks' as const, label: 'Checks', icon: 'lucide:circle-check', count: checks.length },
                 ]).map(tab => (
@@ -536,6 +691,15 @@ export function PrView() {
 
               {/* Tab content */}
               <div className="flex-1 overflow-y-auto">
+                {detailTab === 'workflow' && (
+                  <WorkflowTab
+                    pr={selectedPr}
+                    findings={maintainerFindings}
+                    reviewSummary={reviewSummary}
+                    checksSummary={checksSummary}
+                    workflow={maintainerWorkflow}
+                  />
+                )}
                 {detailTab === 'files' && (
                   <FilesTab files={prFiles} loading={loadingFiles} onFileSelect={setActiveFile} />
                 )}
@@ -545,6 +709,7 @@ export function PrView() {
                     newComment={newComment} posting={posting}
                     onNewCommentChange={setNewComment} onPost={handlePostComment}
                     prState={selectedPr.state}
+                    findings={maintainerFindings}
                   />
                 )}
                 {detailTab === 'reviews' && (
@@ -662,8 +827,8 @@ function PrHeader({ pr, editing, editTitle, editBody, saving, onStartEdit, onEdi
             <span className="text-[var(--text-disabled)]">{pr.changedFiles} files</span>
           </div>
           {pr.body && (
-            <div className="mt-2 ml-[24px] max-h-[120px] overflow-y-auto">
-              <pre className="text-[11px] text-[var(--text-secondary)] whitespace-pre-wrap font-sans leading-relaxed">{pr.body}</pre>
+            <div className="mt-2 ml-[24px] max-h-[180px] overflow-y-auto rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5">
+              <MarkdownPreview content={pr.body} className="text-[11px] text-[var(--text-secondary)] leading-relaxed" />
             </div>
           )}
         </>
@@ -738,6 +903,114 @@ function ActionBar({ pr, merging, mergeMethod, showMergeMenu, mergeMenuRef, merg
   )
 }
 
+// ─── Workflow Tab (CodeFlow-style Maintainer flow) ─────────────
+
+function WorkflowTab({
+  pr,
+  findings,
+  reviewSummary,
+  checksSummary,
+  workflow,
+}: {
+  pr: PullRequestSummary
+  findings: { all: Array<{ id: string; author: string; body: string; createdAt: string; source: string; severity: FindingSeverity }>; counts: Record<FindingSeverity, number> }
+  reviewSummary: { approved: number; changesRequested: number; total: number }
+  checksSummary: { passed: number; failed: number; pending: number; total: number }
+  workflow: {
+    reviewReady: boolean
+    prepareReady: boolean
+    mergeReady: boolean
+    hasApproval: boolean
+    checksGreen: boolean
+    verdict: 'ready' | 'needs-work' | 'needs-discussion'
+    blockers: string[]
+  }
+}) {
+  const phase = [
+    { key: 'review-pr', label: 'Review', ready: workflow.reviewReady, hint: workflow.reviewReady ? 'Findings triaged' : 'Resolve BLOCKER findings' },
+    { key: 'prepare-pr', label: 'Prepare', ready: workflow.prepareReady, hint: workflow.prepareReady ? 'Ready for gates + changelog' : 'Resolve IMPORTANT findings & draft state' },
+    { key: 'merge-pr', label: 'Merge', ready: workflow.mergeReady, hint: workflow.mergeReady ? 'Ready to merge' : 'Need approvals + green checks' },
+  ] as const
+
+  const verdictTone = workflow.verdict === 'ready'
+    ? 'text-[var(--color-additions)] bg-[color-mix(in_srgb,var(--color-additions)_12%,transparent)]'
+    : workflow.verdict === 'needs-work'
+      ? 'text-[var(--color-deletions)] bg-[color-mix(in_srgb,var(--color-deletions)_12%,transparent)]'
+      : 'text-[var(--warning,#eab308)] bg-[color-mix(in_srgb,var(--warning,#eab308)_12%,transparent)]'
+
+  return (
+    <div className="p-4 space-y-3">
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3">
+        <div className="flex items-center gap-2 mb-2">
+          <Icon icon="lucide:workflow" width={13} height={13} className="text-[var(--brand)]" />
+          <span className="text-[11px] font-semibold text-[var(--text-primary)]">OpenClaw Maintainer Workflow</span>
+          <span className={`ml-auto px-2 h-[20px] rounded-full text-[9px] font-semibold leading-[20px] ${verdictTone}`}>
+            {workflow.verdict === 'ready' ? 'READY FOR PREPARE/MERGE' : workflow.verdict === 'needs-work' ? 'NEEDS WORK' : 'NEEDS DISCUSSION'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          {phase.map((p, idx) => (
+            <div key={p.key} className={`rounded-md border p-2 ${p.ready ? 'border-[color-mix(in_srgb,var(--color-additions)_30%,transparent)] bg-[color-mix(in_srgb,var(--color-additions)_8%,transparent)]' : 'border-[var(--border)] bg-[var(--bg-elevated)]'}`}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <Icon icon={p.ready ? 'lucide:circle-check' : 'lucide:circle'} width={11} height={11} className={p.ready ? 'text-[var(--color-additions)]' : 'text-[var(--text-disabled)]'} />
+                <span className="text-[10px] font-semibold text-[var(--text-primary)]">{idx + 1}. {p.label}</span>
+              </div>
+              <p className="text-[9px] text-[var(--text-tertiary)] leading-snug">{p.hint}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3">
+          <p className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">Findings</p>
+          <div className="space-y-1.5">
+            {(['BLOCKER', 'IMPORTANT', 'MINOR', 'NOTE'] as FindingSeverity[]).map(s => (
+              <div key={s} className="flex items-center justify-between text-[10px]">
+                <span className={`px-1.5 py-0.5 rounded border text-[9px] font-semibold ${severityTone(s)}`}>{s}</span>
+                <span className="font-mono text-[var(--text-secondary)]">{findings.counts[s]}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3">
+          <p className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">Merge Gates</p>
+          <div className="space-y-1.5 text-[10px] text-[var(--text-secondary)]">
+            <div className="flex items-center justify-between">
+              <span>Approvals</span>
+              <span className={workflow.hasApproval ? 'text-[var(--color-additions)] font-semibold' : 'text-[var(--warning,#eab308)] font-semibold'}>{reviewSummary.approved} approved</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Checks</span>
+              <span className={workflow.checksGreen ? 'text-[var(--color-additions)] font-semibold' : 'text-[var(--warning,#eab308)] font-semibold'}>{checksSummary.passed}/{checksSummary.total} passing</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Draft state</span>
+              <span className={pr.draft ? 'text-[var(--warning,#eab308)] font-semibold' : 'text-[var(--color-additions)] font-semibold'}>{pr.draft ? 'Draft' : 'Ready'}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {workflow.blockers.length > 0 && (
+        <div className="rounded-lg border border-[color-mix(in_srgb,var(--warning,#eab308)_25%,transparent)] bg-[color-mix(in_srgb,var(--warning,#eab308)_10%,transparent)] p-3">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Icon icon="lucide:triangle-alert" width={12} height={12} className="text-[var(--warning,#eab308)]" />
+            <span className="text-[10px] font-semibold text-[var(--warning,#eab308)] uppercase tracking-wider">Next actions before merge</span>
+          </div>
+          <ul className="space-y-1">
+            {workflow.blockers.map((b, i) => (
+              <li key={i} className="text-[11px] text-[var(--text-secondary)] leading-snug">• {b}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Files Tab ─────────────────────────────────────────────────
 
 function FilesTab({ files, loading, onFileSelect }: { files: PullRequestFile[]; loading: boolean; onFileSelect: (f: PullRequestFile) => void }) {
@@ -762,10 +1035,11 @@ function FilesTab({ files, loading, onFileSelect }: { files: PullRequestFile[]; 
 
 // ─── Conversation Tab ──────────────────────────────────────────
 
-function ConversationTab({ comments, reviewComments, loading, newComment, posting, onNewCommentChange, onPost, prState }: {
+function ConversationTab({ comments, reviewComments, loading, newComment, posting, onNewCommentChange, onPost, prState, findings }: {
   comments: IssueComment[]; reviewComments: ReviewComment[]; loading: boolean
   newComment: string; posting: boolean; onNewCommentChange: (v: string) => void; onPost: () => void
   prState: string
+  findings: { all: Array<{ id: string; author: string; body: string; createdAt: string; source: string; severity: FindingSeverity }>; counts: Record<FindingSeverity, number> }
 }) {
   const allItems = useMemo(() => {
     const items: Array<{ type: 'comment'; data: IssueComment } | { type: 'review_comment'; data: ReviewComment }> = [
@@ -781,6 +1055,22 @@ function ConversationTab({ comments, reviewComments, loading, newComment, postin
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto">
+        {findings.all.length > 0 && (
+          <div className="px-4 py-3 border-b border-[var(--border)] bg-[var(--bg)]">
+            <div className="flex items-center gap-2 mb-2">
+              <Icon icon="lucide:shield-alert" width={12} height={12} className="text-[var(--brand)]" />
+              <span className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Maintainer Findings</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {(['BLOCKER', 'IMPORTANT', 'MINOR', 'NOTE'] as FindingSeverity[]).map(s => (
+                <span key={s} className={`px-1.5 h-[18px] rounded-full border text-[9px] font-semibold leading-[16px] ${severityTone(s)}`}>
+                  {s} {findings.counts[s] > 0 ? `· ${findings.counts[s]}` : ''}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {allItems.length === 0 ? (
           <div className="py-12 text-center">
             <Icon icon="lucide:message-circle" width={28} height={28} className="mx-auto mb-2 opacity-20" />
@@ -802,8 +1092,15 @@ function ConversationTab({ comments, reviewComments, loading, newComment, postin
                         <span className="px-1.5 h-[16px] text-[8px] font-semibold rounded-full bg-[var(--bg-subtle)] text-[var(--text-disabled)] uppercase leading-[16px]">{c.author_association}</span>
                       )}
                       <span className="text-[9px] text-[var(--text-disabled)]">{timeAgo(c.created_at)}</span>
+                      {extractSeverity(c.body) && (
+                        <span className={`px-1.5 h-[16px] rounded-full border text-[8px] font-semibold leading-[14px] ${severityTone(extractSeverity(c.body) as FindingSeverity)}`}>
+                          {extractSeverity(c.body)}
+                        </span>
+                      )}
                     </div>
-                    <pre className="text-[11px] text-[var(--text-secondary)] whitespace-pre-wrap font-sans leading-relaxed ml-7">{c.body}</pre>
+                    <div className="ml-7">
+                      <MarkdownPreview content={c.body} className="text-[11px] text-[var(--text-secondary)] leading-relaxed" />
+                    </div>
                   </div>
                 )
               }
@@ -815,11 +1112,18 @@ function ConversationTab({ comments, reviewComments, loading, newComment, postin
                     <span className="text-[11px] font-semibold text-[var(--text-primary)]">{rc.user.login}</span>
                     <span className="text-[9px] text-[var(--text-disabled)]">{timeAgo(rc.created_at)}</span>
                     <span className="text-[9px] font-mono text-[var(--brand)] bg-[color-mix(in_srgb,var(--brand)_10%,transparent)] px-1 rounded">{rc.path}</span>
+                    {extractSeverity(rc.body) && (
+                      <span className={`px-1.5 h-[16px] rounded-full border text-[8px] font-semibold leading-[14px] ${severityTone(extractSeverity(rc.body) as FindingSeverity)}`}>
+                        {extractSeverity(rc.body)}
+                      </span>
+                    )}
                   </div>
                   {rc.diff_hunk && (
                     <pre className="text-[10px] text-[var(--text-disabled)] font-mono bg-[var(--bg-subtle)] rounded-[var(--radius-sm)] p-2 mb-1.5 ml-7 overflow-x-auto max-h-[80px]">{rc.diff_hunk.split('\n').slice(-3).join('\n')}</pre>
                   )}
-                  <pre className="text-[11px] text-[var(--text-secondary)] whitespace-pre-wrap font-sans leading-relaxed ml-7">{rc.body}</pre>
+                  <div className="ml-7">
+                    <MarkdownPreview content={rc.body} className="text-[11px] text-[var(--text-secondary)] leading-relaxed" />
+                  </div>
                 </div>
               )
             })}
@@ -895,7 +1199,9 @@ function ReviewsTab({ reviews, loading }: { reviews: PRReview[]; loading: boolea
               <span className="text-[9px] text-[var(--text-disabled)] ml-auto">{timeAgo(r.submitted_at)}</span>
             </div>
             {r.body && (
-              <pre className="text-[11px] text-[var(--text-secondary)] whitespace-pre-wrap font-sans leading-relaxed ml-7 mt-1.5">{r.body}</pre>
+              <div className="ml-7 mt-1.5">
+                <MarkdownPreview content={r.body} className="text-[11px] text-[var(--text-secondary)] leading-relaxed" />
+              </div>
             )}
           </div>
         )

@@ -223,7 +223,7 @@ export function MarkdownPreview({ content, className }: MarkdownPreviewProps) {
         code.innerHTML = html
       } catch {}
     })
-  })
+  }, [blocks])
 
   useEffect(() => {
     const el = containerRef.current

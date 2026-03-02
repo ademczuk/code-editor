@@ -309,6 +309,8 @@ export function GitView() {
   const [unstageError, setUnstageError] = useState<string | null>(null)
   const [discarding, setDiscarding] = useState(false)
   const [discardConfirm, setDiscardConfirm] = useState<'changes' | 'staged' | null>(null)
+  const [gqStatus, setGqStatus] = useState<'saving' | 'syncing' | 'cleaning' | 'done' | 'error' | null>(null)
+  const [gqMessage, setGqMessage] = useState<string | null>(null)
 
   const handleUnstage = useCallback(async () => {
     if (!isLocalMode) return
@@ -956,6 +958,92 @@ export function GitView() {
                       <span className="text-[9px] text-[var(--color-deletions)] leading-snug">{pushError}</span>
                     </div>
                   )}
+                  {/* gitquick actions */}
+                  <div className="border-t border-[var(--border)] pt-1.5 mt-1.5">
+                    <div className="flex items-center gap-1 mb-1">
+                      <Icon icon="lucide:zap" width={9} height={9} className="text-[var(--text-disabled)]" />
+                      <span className="text-[8px] font-semibold text-[var(--text-disabled)] uppercase tracking-wider">Quick Actions</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={async () => {
+                          if (!commitMsg.trim()) return
+                          setGqStatus('saving')
+                          try {
+                            const result = await local.gitSave(commitMsg.trim())
+                            setGqStatus('done')
+                            setCommitMsg('')
+                            setGqMessage(result)
+                            setTimeout(() => setGqStatus(null), 3000)
+                          } catch (err) {
+                            setGqStatus('error')
+                            setGqMessage(err instanceof Error ? err.message : String(err))
+                            setTimeout(() => setGqStatus(null), 5000)
+                          }
+                        }}
+                        disabled={!commitMsg.trim() || gqStatus === 'saving'}
+                        className="flex-1 flex items-center justify-center gap-1 h-[24px] rounded-[var(--radius-sm)] text-[9px] font-semibold bg-[color-mix(in_srgb,var(--color-additions)_10%,transparent)] text-[var(--color-additions)] hover:bg-[color-mix(in_srgb,var(--color-additions)_18%,transparent)] cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="git add -A && commit && push"
+                      >
+                        <Icon icon="lucide:save" width={10} height={10} />
+                        Save
+                      </button>
+                      <button
+                        onClick={async () => {
+                          setGqStatus('syncing')
+                          try {
+                            const result = await local.gitSync()
+                            setGqStatus('done')
+                            setGqMessage(result)
+                            setTimeout(() => setGqStatus(null), 3000)
+                          } catch (err) {
+                            setGqStatus('error')
+                            setGqMessage(err instanceof Error ? err.message : String(err))
+                            setTimeout(() => setGqStatus(null), 5000)
+                          }
+                        }}
+                        disabled={gqStatus === 'syncing'}
+                        className="flex-1 flex items-center justify-center gap-1 h-[24px] rounded-[var(--radius-sm)] text-[9px] font-semibold bg-[color-mix(in_srgb,var(--brand)_10%,transparent)] text-[var(--brand)] hover:bg-[color-mix(in_srgb,var(--brand)_18%,transparent)] cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="git pull --rebase && push"
+                      >
+                        <Icon icon="lucide:refresh-cw" width={10} height={10} />
+                        Sync
+                      </button>
+                      <button
+                        onClick={async () => {
+                          setGqStatus('cleaning')
+                          try {
+                            const result = await local.gitCleanBranches()
+                            setGqStatus('done')
+                            setGqMessage(result)
+                            setTimeout(() => setGqStatus(null), 3000)
+                          } catch (err) {
+                            setGqStatus('error')
+                            setGqMessage(err instanceof Error ? err.message : String(err))
+                            setTimeout(() => setGqStatus(null), 5000)
+                          }
+                        }}
+                        disabled={gqStatus === 'cleaning'}
+                        className="flex-1 flex items-center justify-center gap-1 h-[24px] rounded-[var(--radius-sm)] text-[9px] font-semibold bg-[color-mix(in_srgb,var(--text-primary)_6%,transparent)] text-[var(--text-tertiary)] hover:bg-[color-mix(in_srgb,var(--text-primary)_10%,transparent)] cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="Delete merged branches"
+                      >
+                        <Icon icon="lucide:scissors" width={10} height={10} />
+                        Clean
+                      </button>
+                    </div>
+                    {gqStatus && gqMessage && (
+                      <div className={`mt-1 px-2 py-1 rounded-[var(--radius-sm)] text-[9px] leading-snug ${
+                        gqStatus === 'error'
+                          ? 'bg-[color-mix(in_srgb,var(--color-deletions)_8%,transparent)] text-[var(--color-deletions)]'
+                          : gqStatus === 'done'
+                            ? 'bg-[color-mix(in_srgb,var(--color-additions)_8%,transparent)] text-[var(--color-additions)]'
+                            : 'bg-[var(--bg-subtle)] text-[var(--text-tertiary)]'
+                      }`}>
+                        {gqStatus === 'saving' ? 'Saving...' : gqStatus === 'syncing' ? 'Syncing...' : gqStatus === 'cleaning' ? 'Cleaning...' : gqMessage}
+                      </div>
+                    )}
+                  </div>
+
                   <button
                     onClick={() => {
                       setView('prs')
