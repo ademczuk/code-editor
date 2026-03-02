@@ -175,6 +175,25 @@ export function CodeEditor() {
     let mounted = true
 
     const initMonaco = async () => {
+      self.MonacoEnvironment = {
+        getWorker(_workerId: string, label: string) {
+          const base = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs'
+          const workerMap: Record<string, string> = {
+            json: `${base}/language/json/json.worker.js`,
+            css: `${base}/language/css/css.worker.js`,
+            scss: `${base}/language/css/css.worker.js`,
+            less: `${base}/language/css/css.worker.js`,
+            html: `${base}/language/html/html.worker.js`,
+            handlebars: `${base}/language/html/html.worker.js`,
+            razor: `${base}/language/html/html.worker.js`,
+            typescript: `${base}/language/typescript/ts.worker.js`,
+            javascript: `${base}/language/typescript/ts.worker.js`,
+          }
+          const url = workerMap[label] || `${base}/editor/editor.worker.js`
+          return new Worker(url)
+        },
+      }
+
       const monaco = await import('monaco-editor')
       loader.config({ monaco })
 

@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Icon } from '@iconify/react'
 import { KnotLogo } from '@/components/knot-logo'
 import { isTauri } from '@/lib/tauri'
+import { useGateway } from '@/context/gateway-context'
+import { CODE_EDITOR_SESSION_KEY } from '@/lib/agent-session'
 
 export interface ChatSession {
   id: string
@@ -49,6 +51,7 @@ interface Props {
 }
 
 export function WorkspaceSidebar({ activeId, onSelect, onNew, onDelete, collapsed, onToggle, repoName }: Props) {
+  const { sendRequest, status: gwStatus } = useGateway()
   const [isTauriDesktop, setIsTauriDesktop] = useState(false)
   useEffect(() => { setIsTauriDesktop(isTauri()) }, [])
 
@@ -130,8 +133,15 @@ export function WorkspaceSidebar({ activeId, onSelect, onNew, onDelete, collapse
       saveSessions(next)
       return next
     })
+    // Clean up gateway session + localStorage chat history
+    const sessionKey = `${CODE_EDITOR_SESSION_KEY}:${id.slice(0, 8)}`
+    if (gwStatus === 'connected') {
+      sendRequest('sessions.delete', { key: sessionKey }).catch(() => {})
+    }
+    try { localStorage.removeItem(`code-editor:chat:${id}`) } catch {}
+    try { sessionStorage.removeItem(`code-editor:session-init:${sessionKey}`) } catch {}
     onDelete?.(id)
-  }, [onDelete])
+  }, [onDelete, sendRequest, gwStatus])
 
   const pinned = sessions.filter(s => s.pinned)
   const recent = sessions.filter(s => !s.pinned)
