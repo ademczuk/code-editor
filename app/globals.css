@@ -291,9 +291,9 @@
   --shimmer-from: #0a0a0a;
   --shimmer-via: #141414;
 
-  --radius-sm: 2px;
-  --radius-md: 3px;
-  --radius-lg: 4px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 2px;
 }
 
 /* ── Bone Light (ink on paper) ────────────────────────────────── */
@@ -362,9 +362,9 @@
   --shimmer-from: #f0f0f0;
   --shimmer-via: #fafafa;
 
-  --radius-sm: 2px;
-  --radius-md: 3px;
-  --radius-lg: 4px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 2px;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -436,6 +436,10 @@
   --header-glass-bg: rgba(7, 7, 9, 0.92);
   --shimmer-from: #181818;
   --shimmer-via: #222222;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
 }
 
 /* ── Neon Light ───────────────────────────────────────────────── */
@@ -503,6 +507,10 @@
   --header-glass-bg: rgba(250, 248, 255, 0.88);
   --shimmer-from: #f3eefa;
   --shimmer-via: #ffffff;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -575,9 +583,9 @@
   --shimmer-from: #181825;
   --shimmer-via: #313244;
 
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
 }
 
 /* ── Catppuccin Light (Latte) ─────────────────────────────────── */
@@ -646,9 +654,9 @@
   --shimmer-from: #ccd0da;
   --shimmer-via: #e6e9ef;
 
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -2729,9 +2737,9 @@ p { line-height: 1.6; }
   --color-additions: #a3be8c;
   --color-deletions: #bf616a;
 
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
 }
 
 /* ─── Vercel ───────────────────────────────────────────────── */
@@ -2877,9 +2885,9 @@ p { line-height: 1.6; }
   --color-additions: #5a7a4a;
   --color-deletions: #a04030;
 
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
 }
 
 /* Vintage Paper dark variant */
@@ -2951,9 +2959,9 @@ p { line-height: 1.6; }
   --color-additions: #6a8a5a;
   --color-deletions: #b04838;
 
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
 }
 
 /* ─── Caffeine Light ───────────────────────────────────────── */
@@ -3099,9 +3107,9 @@ p { line-height: 1.6; }
   --color-additions: #6a9a5a;
   --color-deletions: #c45b5b;
 
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
 }
 
 /* ─── Vercel Light ─────────────────────────────────────────── */
@@ -3631,6 +3639,8 @@ p { line-height: 1.6; }
   --sidebar-bg: #000000;
   --foreground: #00ff41;
   --subtle: #00661a;
+  --font-sans: 'Share Tech Mono', 'Fira Code', monospace;
+  --font-mono: 'Share Tech Mono', 'Fira Code', monospace;
 
   --brand: #00ff41;
   --brand-hover: #33ff6a;
@@ -3703,6 +3713,8 @@ p { line-height: 1.6; }
   --sidebar-bg: #eaf5ed;
   --foreground: #0a2e14;
   --subtle: #6a8a72;
+  --font-sans: 'Share Tech Mono', 'Fira Code', monospace;
+  --font-mono: 'Share Tech Mono', 'Fira Code', monospace;
 
   --brand: #16a34a;
   --brand-hover: #15803d;
@@ -3760,9 +3772,9 @@ p { line-height: 1.6; }
   --shimmer-from: var(--bg-elevated);
   --shimmer-via: var(--bg-subtle);
 
-  --radius-sm: 2px;
-  --radius-md: 3px;
-  --radius-lg: 4px;
+  --radius-sm: 0px;
+  --radius-md: 1px;
+  --radius-lg: 2px;
 }
 
 /* ── CyberNord semantic tokens ────────────────────────────────── */
