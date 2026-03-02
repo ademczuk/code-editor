@@ -188,9 +188,12 @@ export function PrView() {
   const [editBody, setEditBody] = useState('')
   const [saving, setSaving] = useState(false)
 
-  // Comment input
+  // Comment input + conversation UX
   const [newComment, setNewComment] = useState('')
   const [posting, setPosting] = useState(false)
+  const [findingsOnly, setFindingsOnly] = useState(false)
+  const [highlightFindingId, setHighlightFindingId] = useState<string | null>(null)
+  const triageIdxRef = useRef({ blocker: 0, priority: 0 })
 
   const branchName = local.gitInfo?.branch || repo?.branch || 'main'
   const preferredBaseBranch = useMemo(() => {
@@ -212,6 +215,26 @@ export function PrView() {
   }, [repo, filter])
 
   useEffect(() => { loadPrs() }, [loadPrs])
+
+  const filterPresetKey = repo ? `ce:pr-filters:${repo.fullName}` : null
+
+  useEffect(() => {
+    if (!filterPresetKey) return
+    try {
+      const raw = localStorage.getItem(filterPresetKey)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as { labelFilter?: string; findingsOnly?: boolean }
+      if (parsed.labelFilter) setLabelFilter(parsed.labelFilter)
+      if (typeof parsed.findingsOnly === 'boolean') setFindingsOnly(parsed.findingsOnly)
+    } catch {}
+  }, [filterPresetKey])
+
+  useEffect(() => {
+    if (!filterPresetKey) return
+    try {
+      localStorage.setItem(filterPresetKey, JSON.stringify({ labelFilter, findingsOnly }))
+    } catch {}
+  }, [filterPresetKey, labelFilter, findingsOnly])
 
   useEffect(() => {
     if (repo) {
@@ -246,6 +269,8 @@ export function PrView() {
     setCloseError(null)
     setEditing(false)
     setDetailTab('workflow')
+    setFindingsOnly(false)
+    setHighlightFindingId(null)
     setLoadingFiles(true)
     setLoadingExtra(true)
     try {
@@ -513,6 +538,44 @@ export function PrView() {
     }
   }, [reviewSummary, checksSummary, maintainerFindings, selectedPr])
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName?.toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+      if (!selectedPr) return
+
+      const blockerList = maintainerFindings.all.filter(f => f.severity === 'BLOCKER')
+      const priorityList = maintainerFindings.all.filter(f => f.severity === 'BLOCKER' || f.severity === 'IMPORTANT')
+
+      // Shift+B → next BLOCKER
+      if (e.shiftKey && e.key.toLowerCase() === 'b') {
+        if (blockerList.length === 0) return
+        e.preventDefault()
+        const idx = triageIdxRef.current.blocker % blockerList.length
+        triageIdxRef.current.blocker += 1
+        setDetailTab('conversation')
+        setFindingsOnly(true)
+        setHighlightFindingId(blockerList[idx].id)
+        return
+      }
+
+      // Shift+N → next BLOCKER/IMPORTANT
+      if (e.shiftKey && e.key.toLowerCase() === 'n') {
+        if (priorityList.length === 0) return
+        e.preventDefault()
+        const idx = triageIdxRef.current.priority % priorityList.length
+        triageIdxRef.current.priority += 1
+        setDetailTab('conversation')
+        setFindingsOnly(true)
+        setHighlightFindingId(priorityList[idx].id)
+      }
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectedPr, maintainerFindings])
+
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">
       {/* Left panel -- PR list */}
@@ -698,6 +761,14 @@ export function PrView() {
                     reviewSummary={reviewSummary}
                     checksSummary={checksSummary}
                     workflow={maintainerWorkflow}
+                    onOpenFindings={(focusBlockers) => {
+                      setDetailTab('conversation')
+                      setFindingsOnly(true)
+                      const target = focusBlockers
+                        ? maintainerFindings.all.find(f => f.severity === 'BLOCKER')?.id ?? null
+                        : maintainerFindings.all[0]?.id ?? null
+                      setHighlightFindingId(target)
+                    }}
                   />
                 )}
                 {detailTab === 'files' && (
@@ -710,6 +781,10 @@ export function PrView() {
                     onNewCommentChange={setNewComment} onPost={handlePostComment}
                     prState={selectedPr.state}
                     findings={maintainerFindings}
+                    findingsOnly={findingsOnly}
+                    onFindingsOnlyChange={setFindingsOnly}
+                    highlightFindingId={highlightFindingId}
+                    onHighlightConsumed={() => setHighlightFindingId(null)}
                   />
                 )}
                 {detailTab === 'reviews' && (
@@ -911,6 +986,7 @@ function WorkflowTab({
   reviewSummary,
   checksSummary,
   workflow,
+  onOpenFindings,
 }: {
   pr: PullRequestSummary
   findings: { all: Array<{ id: string; author: string; body: string; createdAt: string; source: string; severity: FindingSeverity }>; counts: Record<FindingSeverity, number> }
@@ -925,6 +1001,7 @@ function WorkflowTab({
     verdict: 'ready' | 'needs-work' | 'needs-discussion'
     blockers: string[]
   }
+  onOpenFindings: (focusBlockers: boolean) => void
 }) {
   const phase = [
     { key: 'review-pr', label: 'Review', ready: workflow.reviewReady, hint: workflow.reviewReady ? 'Findings triaged' : 'Resolve BLOCKER findings' },
@@ -960,18 +1037,38 @@ function WorkflowTab({
             </div>
           ))}
         </div>
+
+        <div className="flex items-center gap-1.5 mt-2">
+          <button
+            onClick={() => onOpenFindings(findings.counts.BLOCKER > 0)}
+            disabled={findings.all.length === 0}
+            className={`h-[24px] px-2.5 rounded-[var(--radius-sm)] text-[10px] font-medium cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed ${
+              findings.counts.BLOCKER > 0
+                ? 'bg-[color-mix(in_srgb,var(--color-deletions)_10%,transparent)] text-[var(--color-deletions)] hover:bg-[color-mix(in_srgb,var(--color-deletions)_18%,transparent)]'
+                : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]'
+            }`}
+          >
+            {findings.counts.BLOCKER > 0 ? 'Review blockers in conversation' : 'Review findings in conversation'}
+          </button>
+          <span className="ml-auto text-[9px] text-[var(--text-disabled)]">⇧B blocker · ⇧N next</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3">
           <p className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">Findings</p>
           <div className="space-y-1.5">
-            {(['BLOCKER', 'IMPORTANT', 'MINOR', 'NOTE'] as FindingSeverity[]).map(s => (
-              <div key={s} className="flex items-center justify-between text-[10px]">
-                <span className={`px-1.5 py-0.5 rounded border text-[9px] font-semibold ${severityTone(s)}`}>{s}</span>
-                <span className="font-mono text-[var(--text-secondary)]">{findings.counts[s]}</span>
-              </div>
-            ))}
+            {(['BLOCKER', 'IMPORTANT', 'MINOR', 'NOTE'] as FindingSeverity[])
+              .filter(s => findings.counts[s] > 0)
+              .map(s => (
+                <div key={s} className="flex items-center justify-between text-[10px]">
+                  <span className={`px-1.5 py-0.5 rounded border text-[9px] font-semibold ${severityTone(s)}`}>{s}</span>
+                  <span className="font-mono text-[var(--text-secondary)]">{findings.counts[s]}</span>
+                </div>
+              ))}
+            {findings.all.length === 0 && (
+              <p className="text-[10px] text-[var(--text-disabled)]">No tagged findings yet.</p>
+            )}
           </div>
         </div>
 
@@ -1035,20 +1132,56 @@ function FilesTab({ files, loading, onFileSelect }: { files: PullRequestFile[]; 
 
 // ─── Conversation Tab ──────────────────────────────────────────
 
-function ConversationTab({ comments, reviewComments, loading, newComment, posting, onNewCommentChange, onPost, prState, findings }: {
+function ConversationTab({ comments, reviewComments, loading, newComment, posting, onNewCommentChange, onPost, prState, findings, findingsOnly, onFindingsOnlyChange, highlightFindingId, onHighlightConsumed }: {
   comments: IssueComment[]; reviewComments: ReviewComment[]; loading: boolean
   newComment: string; posting: boolean; onNewCommentChange: (v: string) => void; onPost: () => void
   prState: string
   findings: { all: Array<{ id: string; author: string; body: string; createdAt: string; source: string; severity: FindingSeverity }>; counts: Record<FindingSeverity, number> }
+  findingsOnly: boolean
+  onFindingsOnlyChange: (v: boolean) => void
+  highlightFindingId: string | null
+  onHighlightConsumed: () => void
 }) {
   const allItems = useMemo(() => {
-    const items: Array<{ type: 'comment'; data: IssueComment } | { type: 'review_comment'; data: ReviewComment }> = [
-      ...comments.map(c => ({ type: 'comment' as const, data: c })),
-      ...reviewComments.filter(rc => !rc.in_reply_to_id).map(rc => ({ type: 'review_comment' as const, data: rc })),
+    const items: Array<
+      | { id: string; type: 'comment'; data: IssueComment; severity: FindingSeverity | null }
+      | { id: string; type: 'review_comment'; data: ReviewComment; severity: FindingSeverity | null }
+    > = [
+      ...comments.map(c => ({ id: `issue-${c.id}`, type: 'comment' as const, data: c, severity: extractSeverity(c.body) })),
+      ...reviewComments.filter(rc => !rc.in_reply_to_id).map(rc => ({ id: `review-comment-${rc.id}`, type: 'review_comment' as const, data: rc, severity: extractSeverity(rc.body) })),
     ]
     items.sort((a, b) => new Date(a.data.created_at).getTime() - new Date(b.data.created_at).getTime())
-    return items
-  }, [comments, reviewComments])
+    return findingsOnly ? items.filter(i => !!i.severity) : items
+  }, [comments, reviewComments, findingsOnly])
+
+  const repliesByParent = useMemo(() => {
+    const map = new Map<number, ReviewComment[]>()
+    reviewComments
+      .filter(rc => !!rc.in_reply_to_id)
+      .forEach(rc => {
+        const parent = rc.in_reply_to_id as number
+        const list = map.get(parent) || []
+        list.push(rc)
+        map.set(parent, list)
+      })
+    for (const [, list] of map) {
+      list.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    }
+    return map
+  }, [reviewComments])
+
+  const [expandedBodies, setExpandedBodies] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    if (!highlightFindingId) return
+    const el = document.getElementById(`finding-${highlightFindingId}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('ring-2', 'ring-[var(--brand)]')
+      setTimeout(() => el.classList.remove('ring-2', 'ring-[var(--brand)]'), 1400)
+    }
+    onHighlightConsumed()
+  }, [highlightFindingId, onHighlightConsumed])
 
   if (loading) return <div className="py-12 text-center"><Icon icon="lucide:loader" width={16} height={16} className="mx-auto animate-spin text-[var(--brand)]" /></div>
 
@@ -1060,13 +1193,32 @@ function ConversationTab({ comments, reviewComments, loading, newComment, postin
             <div className="flex items-center gap-2 mb-2">
               <Icon icon="lucide:shield-alert" width={12} height={12} className="text-[var(--brand)]" />
               <span className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Maintainer Findings</span>
+              <div className="ml-auto flex items-center gap-1">
+                <button
+                  onClick={() => onFindingsOnlyChange(false)}
+                  className={`h-[20px] px-2 rounded-[var(--radius-sm)] text-[9px] cursor-pointer ${!findingsOnly ? 'bg-[var(--bg-subtle)] text-[var(--text-primary)]' : 'text-[var(--text-disabled)] hover:bg-[var(--bg-subtle)]'}`}
+                >
+                  All
+                </button>
+                <button
+                  onClick={() => onFindingsOnlyChange(true)}
+                  className={`h-[20px] px-2 rounded-[var(--radius-sm)] text-[9px] cursor-pointer ${findingsOnly ? 'bg-[var(--brand)] text-[var(--brand-contrast)]' : 'text-[var(--text-disabled)] hover:bg-[var(--bg-subtle)]'}`}
+                >
+                  Findings only
+                </button>
+              </div>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {(['BLOCKER', 'IMPORTANT', 'MINOR', 'NOTE'] as FindingSeverity[]).map(s => (
-                <span key={s} className={`px-1.5 h-[18px] rounded-full border text-[9px] font-semibold leading-[16px] ${severityTone(s)}`}>
-                  {s} {findings.counts[s] > 0 ? `· ${findings.counts[s]}` : ''}
-                </span>
-              ))}
+              {(['BLOCKER', 'IMPORTANT', 'MINOR', 'NOTE'] as FindingSeverity[])
+                .filter(s => findings.counts[s] > 0)
+                .map(s => (
+                  <span key={s} className={`px-1.5 h-[18px] rounded-full border text-[9px] font-semibold leading-[16px] ${severityTone(s)}`}>
+                    {s} · {findings.counts[s]}
+                  </span>
+                ))}
+              {findings.all.length === 0 && (
+                <span className="text-[9px] text-[var(--text-disabled)]">No findings tagged</span>
+              )}
             </div>
           </div>
         )}
@@ -1074,7 +1226,7 @@ function ConversationTab({ comments, reviewComments, loading, newComment, postin
         {allItems.length === 0 ? (
           <div className="py-12 text-center">
             <Icon icon="lucide:message-circle" width={28} height={28} className="mx-auto mb-2 opacity-20" />
-            <p className="text-[11px] text-[var(--text-tertiary)]">No comments yet</p>
+            <p className="text-[11px] text-[var(--text-tertiary)]">{findingsOnly ? 'No findings-tagged comments' : 'No comments yet'}</p>
           </div>
         ) : (
           <div className="divide-y divide-[var(--border)]">
@@ -1082,7 +1234,7 @@ function ConversationTab({ comments, reviewComments, loading, newComment, postin
               if (item.type === 'comment') {
                 const c = item.data
                 return (
-                  <div key={`c-${c.id}`} className="px-4 py-3">
+                  <div key={item.id} id={`finding-${item.id}`} className="px-4 py-3">
                     <div className="flex items-center gap-2 mb-1.5">
                       {c.user.avatar_url && (
                         <img src={c.user.avatar_url} alt="" className="w-5 h-5 rounded-full" />
@@ -1092,29 +1244,40 @@ function ConversationTab({ comments, reviewComments, loading, newComment, postin
                         <span className="px-1.5 h-[16px] text-[8px] font-semibold rounded-full bg-[var(--bg-subtle)] text-[var(--text-disabled)] uppercase leading-[16px]">{c.author_association}</span>
                       )}
                       <span className="text-[9px] text-[var(--text-disabled)]">{timeAgo(c.created_at)}</span>
-                      {extractSeverity(c.body) && (
-                        <span className={`px-1.5 h-[16px] rounded-full border text-[8px] font-semibold leading-[14px] ${severityTone(extractSeverity(c.body) as FindingSeverity)}`}>
-                          {extractSeverity(c.body)}
+                      {item.severity && (
+                        <span className={`px-1.5 h-[16px] rounded-full border text-[8px] font-semibold leading-[14px] ${severityTone(item.severity)}`}>
+                          {item.severity}
                         </span>
                       )}
                     </div>
                     <div className="ml-7">
-                      <MarkdownPreview content={c.body} className="text-[11px] text-[var(--text-secondary)] leading-relaxed" />
+                      <div className={`${!expandedBodies[item.id] && c.body.length > 700 ? 'max-h-[180px] overflow-hidden relative' : ''}`}>
+                        <MarkdownPreview content={c.body} className="text-[11px] text-[var(--text-secondary)] leading-relaxed" />
+                        {!expandedBodies[item.id] && c.body.length > 700 && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[var(--bg-elevated)] to-transparent" />}
+                      </div>
+                      {c.body.length > 700 && (
+                        <button
+                          onClick={() => setExpandedBodies(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                          className="mt-1 text-[10px] text-[var(--brand)] hover:opacity-80 cursor-pointer"
+                        >
+                          {expandedBodies[item.id] ? 'Show less' : 'Show more'}
+                        </button>
+                      )}
                     </div>
                   </div>
                 )
               }
               const rc = item.data
               return (
-                <div key={`rc-${rc.id}`} className="px-4 py-3">
+                <div key={item.id} id={`finding-${item.id}`} className="px-4 py-3">
                   <div className="flex items-center gap-2 mb-1.5">
                     {rc.user.avatar_url && <img src={rc.user.avatar_url} alt="" className="w-5 h-5 rounded-full" />}
                     <span className="text-[11px] font-semibold text-[var(--text-primary)]">{rc.user.login}</span>
                     <span className="text-[9px] text-[var(--text-disabled)]">{timeAgo(rc.created_at)}</span>
                     <span className="text-[9px] font-mono text-[var(--brand)] bg-[color-mix(in_srgb,var(--brand)_10%,transparent)] px-1 rounded">{rc.path}</span>
-                    {extractSeverity(rc.body) && (
-                      <span className={`px-1.5 h-[16px] rounded-full border text-[8px] font-semibold leading-[14px] ${severityTone(extractSeverity(rc.body) as FindingSeverity)}`}>
-                        {extractSeverity(rc.body)}
+                    {item.severity && (
+                      <span className={`px-1.5 h-[16px] rounded-full border text-[8px] font-semibold leading-[14px] ${severityTone(item.severity)}`}>
+                        {item.severity}
                       </span>
                     )}
                   </div>
@@ -1122,7 +1285,29 @@ function ConversationTab({ comments, reviewComments, loading, newComment, postin
                     <pre className="text-[10px] text-[var(--text-disabled)] font-mono bg-[var(--bg-subtle)] rounded-[var(--radius-sm)] p-2 mb-1.5 ml-7 overflow-x-auto max-h-[80px]">{rc.diff_hunk.split('\n').slice(-3).join('\n')}</pre>
                   )}
                   <div className="ml-7">
-                    <MarkdownPreview content={rc.body} className="text-[11px] text-[var(--text-secondary)] leading-relaxed" />
+                    <div className={`${!expandedBodies[item.id] && rc.body.length > 700 ? 'max-h-[180px] overflow-hidden relative' : ''}`}>
+                      <MarkdownPreview content={rc.body} className="text-[11px] text-[var(--text-secondary)] leading-relaxed" />
+                      {!expandedBodies[item.id] && rc.body.length > 700 && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[var(--bg-elevated)] to-transparent" />}
+                    </div>
+                    {rc.body.length > 700 && (
+                      <button
+                        onClick={() => setExpandedBodies(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                        className="mt-1 text-[10px] text-[var(--brand)] hover:opacity-80 cursor-pointer"
+                      >
+                        {expandedBodies[item.id] ? 'Show less' : 'Show more'}
+                      </button>
+                    )}
+
+                    {(repliesByParent.get(rc.id) || []).map(reply => (
+                      <div key={reply.id} className="mt-2 ml-3 pl-3 border-l border-[var(--border)]">
+                        <div className="flex items-center gap-2 mb-1">
+                          {reply.user.avatar_url && <img src={reply.user.avatar_url} alt="" className="w-4 h-4 rounded-full" />}
+                          <span className="text-[10px] font-semibold text-[var(--text-primary)]">{reply.user.login}</span>
+                          <span className="text-[9px] text-[var(--text-disabled)]">{timeAgo(reply.created_at)}</span>
+                        </div>
+                        <MarkdownPreview content={reply.body} className="text-[10px] text-[var(--text-secondary)] leading-relaxed" />
+                      </div>
+                    ))}
                   </div>
                 </div>
               )

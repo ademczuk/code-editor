@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, useMemo, memo, type ReactNode, type ComponentType } from 'react'
 
-export type PluginSlot = 'status-bar-left' | 'status-bar-right' | 'floating' | 'settings'
+export type PluginSlot = 'status-bar-left' | 'status-bar-right' | 'floating' | 'sidebar' | 'settings'
 
 export interface PluginEntry {
   id: string
@@ -22,6 +22,7 @@ const EMPTY_SLOTS: Record<PluginSlot, PluginEntry[]> = {
   'status-bar-left': [],
   'status-bar-right': [],
   floating: [],
+  sidebar: [],
   settings: [],
 }
 

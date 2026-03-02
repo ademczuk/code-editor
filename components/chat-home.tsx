@@ -1,18 +1,18 @@
 'use client'
 
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react'
 import { Icon } from '@iconify/react'
 import { KnotLogo } from '@/components/knot-logo'
 import { ModeSelector } from '@/components/mode-selector'
 import type { AgentMode } from '@/components/mode-selector'
-// permissions now controlled via mode toggle (chat vs code)
 import { useRepo } from '@/context/repo-context'
 import { useLocal } from '@/context/local-context'
 import { useGateway } from '@/context/gateway-context'
 import { useGitHubAuth } from '@/context/github-auth-context'
+import { useEditor } from '@/context/editor-context'
 import { getRecentFolders } from '@/context/local-context'
 
-const SUGGESTIONS = [
+const STATIC_SUGGESTIONS = [
   { icon: 'lucide:sparkles', label: 'Edit this', prefix: 'Edit ' },
   { icon: 'lucide:zap', label: 'Squash bug', prefix: 'Fix ' },
   { icon: 'lucide:flame', label: 'Explain plz', prefix: 'Explain ' },
@@ -20,13 +20,32 @@ const SUGGESTIONS = [
   { icon: 'lucide:star', label: 'Review PR', prefix: 'Review ' },
 ]
 
+function IconButton({ icon, title, size = 14, onClick, className = '' }: {
+  icon: string
+  title: string
+  size?: number
+  onClick?: () => void
+  className?: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`p-1.5 rounded-md text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] hover:bg-[color-mix(in_srgb,var(--text-primary)_5%,transparent)] transition-colors cursor-pointer ${className}`}
+      title={title}
+      aria-label={title}
+    >
+      <Icon icon={icon} width={size} height={size} />
+    </button>
+  )
+}
+
 interface Props {
   onSend: (text: string, mode: AgentMode) => void
   onSelectFolder: () => void
   onCloneRepo: () => void
 }
 
-export function ChatHome({ onSend, onSelectFolder, onCloneRepo }: Props) {
+export const ChatHome = memo(function ChatHome({ onSend, onSelectFolder, onCloneRepo }: Props) {
   const [input, setInput] = useState('')
   const [agentMode, setAgentMode] = useState<AgentMode>('code')
   const [isFocused, setIsFocused] = useState(false)
@@ -40,36 +59,93 @@ export function ChatHome({ onSend, onSelectFolder, onCloneRepo }: Props) {
   const local = useLocal()
   const { status } = useGateway()
   const { token: ghToken, authenticated, setManualToken, clearToken } = useGitHubAuth()
-  const isConnected = status === 'connected'
+  const { files: openFiles } = useEditor()
 
   const repoShort = useMemo(() => repo?.fullName?.split('/').pop() ?? local.rootPath?.split('/').pop() ?? null, [repo?.fullName, local.rootPath])
   const hasWorkspace = !!repoShort
-  const recentFolders = useMemo(() => getRecentFolders(), [])
+
+  const [recentFolders, setRecentFolders] = useState<string[]>(() => getRecentFolders())
+
+  useEffect(() => {
+    setRecentFolders(getRecentFolders())
+  }, [local.rootPath])
 
   useEffect(() => {
     const t = setTimeout(() => inputRef.current?.focus(), 100)
     return () => clearTimeout(t)
   }, [])
 
-  const handleSubmit = () => {
+  // Auto-resize textarea
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = '0'
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`
+  }, [input])
+
+  const handleSubmit = useCallback(() => {
     const t = input.trim()
     if (!t) return
     onSend(t, agentMode)
     setInput('')
-  }
+  }, [input, agentMode, onSend])
 
-  const handleSaveToken = () => {
+  const handleSaveToken = useCallback(() => {
     const trimmed = tokenDraft.trim()
     if (!trimmed) return
     setManualToken(trimmed)
     setTokenDraft('')
     setShowTokenInput(false)
     setTokenRevealed(false)
-  }
+  }, [tokenDraft, setManualToken])
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit() }
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleSubmit() }
+    if (e.key === 'Tab' && !input.trim()) {
+      e.preventDefault()
+      setAgentMode(m => m === 'chat' ? 'code' : 'chat')
+    }
+  }, [handleSubmit, input])
 
   const maskedToken = ghToken
     ? `${ghToken.slice(0, 4)}${'•'.repeat(Math.min(ghToken.length - 8, 24))}${ghToken.slice(-4)}`
     : ''
+
+  // Context-aware suggestions: use open files and local tree when a workspace is active
+  const suggestions = useMemo(() => {
+    if (!hasWorkspace) return STATIC_SUGGESTIONS
+
+    const contextChips: typeof STATIC_SUGGESTIONS = []
+
+    // Suggest editing open files
+    if (openFiles.length > 0) {
+      const recent = openFiles[openFiles.length - 1]
+      const name = recent.path.split('/').pop() || recent.path
+      contextChips.push({ icon: 'lucide:sparkles', label: `Edit ${name}`, prefix: `Edit ${recent.path} ` })
+    }
+
+    // Suggest explaining a notable file from the tree
+    const treeFiles = local.localTree?.filter(e => !e.is_dir) ?? []
+    const interesting = treeFiles.find(f =>
+      /\.(ts|tsx|rs|py|go)$/.test(f.path) &&
+      !f.path.includes('node_modules') &&
+      !f.path.includes('.lock')
+    )
+    if (interesting) {
+      const name = interesting.path.split('/').pop() || interesting.path
+      contextChips.push({ icon: 'lucide:flame', label: `Explain ${name}`, prefix: `Explain ${interesting.path} ` })
+    }
+
+    // Always include some generic actions
+    contextChips.push(
+      { icon: 'lucide:zap', label: 'Squash bug', prefix: 'Fix ' },
+      { icon: 'lucide:wand-2', label: 'Test it', prefix: 'Write tests for ' },
+      { icon: 'lucide:star', label: 'Review PR', prefix: 'Review ' },
+    )
+
+    return contextChips.slice(0, 5)
+  }, [hasWorkspace, openFiles, local.localTree])
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 overflow-y-auto">
@@ -82,11 +158,13 @@ export function ChatHome({ onSend, onSelectFolder, onCloneRepo }: Props) {
           <h1 className="text-center text-[17px] font-semibold text-[var(--text-primary)] tracking-[-0.01em] leading-tight">
             {repoShort ? `What should we work on?` : `What do you want to build?`}
           </h1>
-          {hasWorkspace && (
+          {hasWorkspace ? (
             <button onClick={onSelectFolder} className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] transition-colors cursor-pointer">
               <Icon icon="lucide:folder-git-2" width={11} height={11} />
               {repoShort}
             </button>
+          ) : (
+            <p className="mt-1.5 text-[11px] text-[var(--text-disabled)]">AI-powered code editor</p>
           )}
         </div>
 
@@ -107,55 +185,48 @@ export function ChatHome({ onSend, onSelectFolder, onCloneRepo }: Props) {
             onChange={e => setInput(e.target.value)}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit() } }}
-            placeholder={repoShort ? `Ask anything about ${repoShort}…` : 'Ask or type /command…'}
-            rows={2}
-            className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-[14px] leading-[1.6] text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] outline-none"
+            onKeyDown={handleKeyDown}
+            placeholder={repoShort ? `Ask anything about ${repoShort}…` : 'Describe what you want to build…'}
+            aria-label={repoShort ? `Ask anything about ${repoShort}` : 'Describe what you want to build'}
+            className="w-full bg-transparent px-4 pt-3 pb-1 text-[14px] leading-[1.6] text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] outline-none resize-none min-h-[48px] max-h-[200px] overflow-y-auto"
           />
 
           {/* Toolbar */}
-          <div className="px-3 pb-2 pt-0.5 space-y-1">
-            {/* Row 1: Attachments left, selectors + send right */}
+          <div className="px-3 pb-2 pt-0.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-0.5">
-                <button className="p-1.5 rounded-md text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] hover:bg-[color-mix(in_srgb,var(--text-primary)_5%,transparent)] transition-colors cursor-pointer" title="Attach file">
-                  <Icon icon="lucide:paperclip" width={14} height={14} />
-                </button>
-                <button className="p-1.5 rounded-md text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] hover:bg-[color-mix(in_srgb,var(--text-primary)_5%,transparent)] transition-colors cursor-pointer" title="Attach image">
-                  <Icon icon="lucide:image-plus" width={14} height={14} />
-                </button>
-                <button className="p-1.5 rounded-md text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] hover:bg-[color-mix(in_srgb,var(--text-primary)_5%,transparent)] transition-colors cursor-pointer" title="@ mention file">
-                  <Icon icon="lucide:at-sign" width={14} height={14} />
-                </button>
+                <IconButton icon="lucide:paperclip" title="Attach file" />
+                <IconButton icon="lucide:image-plus" title="Attach image" />
+                <IconButton icon="lucide:at-sign" title="@ mention file" />
+                <div className="w-px h-4 bg-[var(--border)] mx-1" />
+                <ModeSelector mode={agentMode} onChange={setAgentMode} size="sm" />
               </div>
 
               <button
-                  onClick={handleSubmit}
-                  disabled={!input.trim()}
-                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                    input.trim()
-                      ? 'bg-[var(--text-primary)] text-[var(--bg)] shadow-sm hover:opacity-90 active:scale-95'
-                      : 'bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] text-[var(--text-disabled)] cursor-not-allowed'
-                  }`}
-                >
-                  <Icon icon="lucide:arrow-up" width={14} height={14} />
-                </button>
-            </div>
-
-            {/* Bottom: mode toggle */}
-            <div className="flex items-center justify-center">
-              <ModeSelector mode={agentMode} onChange={setAgentMode} size="sm" />
+                onClick={handleSubmit}
+                disabled={!input.trim()}
+                aria-label="Send message"
+                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                  input.trim()
+                    ? 'bg-[var(--text-primary)] text-[var(--bg)] shadow-sm hover:opacity-90 active:scale-95'
+                    : 'bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] text-[var(--text-disabled)] cursor-not-allowed'
+                }`}
+              >
+                <Icon icon="lucide:arrow-up" width={14} height={14} />
+              </button>
             </div>
           </div>
         </div>
 
         {/* Quick action chips */}
         <div className="flex flex-wrap items-center justify-center gap-1.5 mt-2">
-          {SUGGESTIONS.map((a, i) => (
+          {suggestions.map((a, i) => (
             <button
               key={a.label}
               onClick={() => { setInput(a.prefix); inputRef.current?.focus() }}
-              className={`anime-chip flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium bg-[color-mix(in_srgb,var(--brand)_8%,var(--bg-elevated))] text-[var(--text-secondary)] border border-[color-mix(in_srgb,var(--brand)_12%,var(--border))] hover:text-[var(--text-primary)] hover:bg-[color-mix(in_srgb,var(--brand)_14%,var(--bg-elevated))] hover:border-[color-mix(in_srgb,var(--brand)_30%,var(--border))] hover:scale-105 active:scale-95 transition-all cursor-pointer animate-pill-float animate-pill-float-${i + 1}`}
+              aria-label={`${a.label}: ${a.prefix}`}
+              className="anime-chip chip-enter flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium bg-[color-mix(in_srgb,var(--brand)_8%,var(--bg-elevated))] text-[var(--text-secondary)] border border-[color-mix(in_srgb,var(--brand)_12%,var(--border))] hover:text-[var(--text-primary)] hover:bg-[color-mix(in_srgb,var(--brand)_14%,var(--bg-elevated))] hover:border-[color-mix(in_srgb,var(--brand)_30%,var(--border))] hover:scale-105 active:scale-95 transition-all cursor-pointer"
+              style={{ animationDelay: `${i * 0.08}s` }}
             >
               <Icon icon={a.icon} width={14} height={14} className="text-[var(--brand)]" />
               {a.label}
@@ -238,17 +309,17 @@ export function ChatHome({ onSend, onSelectFolder, onCloneRepo }: Props) {
                       <span className="text-[12px] text-[var(--text-secondary)] flex-1 font-mono truncate">
                         {tokenRevealed ? ghToken : maskedToken}
                       </span>
-                      <button
-                        onClick={() => setTokenRevealed(v => !v)}
-                        className="p-1 rounded-md hover:bg-[color-mix(in_srgb,var(--text-primary)_5%,transparent)] text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] transition-colors cursor-pointer"
+                      <IconButton
+                        icon={tokenRevealed ? 'lucide:eye-off' : 'lucide:eye'}
                         title={tokenRevealed ? 'Hide token' : 'Reveal token'}
-                      >
-                        <Icon icon={tokenRevealed ? 'lucide:eye-off' : 'lucide:eye'} width={13} height={13} />
-                      </button>
+                        size={13}
+                        onClick={() => setTokenRevealed(v => !v)}
+                      />
                       <button
                         onClick={() => { clearToken(); setTokenRevealed(false) }}
                         className="p-1 rounded-md hover:bg-[color-mix(in_srgb,var(--error)_10%,transparent)] text-[var(--text-disabled)] hover:text-[var(--error)] transition-colors cursor-pointer"
                         title="Remove token"
+                        aria-label="Remove token"
                       >
                         <Icon icon="lucide:x" width={13} height={13} />
                       </button>
@@ -267,14 +338,14 @@ export function ChatHome({ onSend, onSelectFolder, onCloneRepo }: Props) {
                           className="flex-1 bg-transparent text-[12px] font-mono text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] outline-none min-w-0"
                           autoComplete="off"
                           spellCheck={false}
+                          aria-label="GitHub personal access token"
                         />
-                        <button
-                          onClick={() => setTokenRevealed(v => !v)}
-                          className="p-1 rounded hover:bg-[color-mix(in_srgb,var(--text-primary)_5%,transparent)] text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] transition-colors cursor-pointer"
+                        <IconButton
+                          icon={tokenRevealed ? 'lucide:eye-off' : 'lucide:eye'}
                           title={tokenRevealed ? 'Hide' : 'Reveal'}
-                        >
-                          <Icon icon={tokenRevealed ? 'lucide:eye-off' : 'lucide:eye'} width={13} height={13} />
-                        </button>
+                          size={13}
+                          onClick={() => setTokenRevealed(v => !v)}
+                        />
                       </div>
                       <button
                         onClick={handleSaveToken}
@@ -287,12 +358,12 @@ export function ChatHome({ onSend, onSelectFolder, onCloneRepo }: Props) {
                       >
                         Save
                       </button>
-                      <button
+                      <IconButton
+                        icon="lucide:x"
+                        title="Cancel"
+                        size={13}
                         onClick={() => { setShowTokenInput(false); setTokenDraft(''); setTokenRevealed(false) }}
-                        className="p-1.5 rounded-md hover:bg-[color-mix(in_srgb,var(--text-primary)_5%,transparent)] text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] transition-colors cursor-pointer"
-                      >
-                        <Icon icon="lucide:x" width={13} height={13} />
-                      </button>
+                      />
                     </div>
                   ) : (
                     <button
@@ -314,4 +385,4 @@ export function ChatHome({ onSend, onSelectFolder, onCloneRepo }: Props) {
       </div>
     </div>
   )
-}
+})

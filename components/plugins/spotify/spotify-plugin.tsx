@@ -10,7 +10,7 @@ export function SpotifyPlugin() {
   const { registerPlugin, unregisterPlugin } = usePlugins()
 
   useEffect(() => {
-    registerPlugin('floating', {
+    registerPlugin('sidebar', {
       id: 'spotify-player',
       component: SpotifyPlayer,
       order: 10,

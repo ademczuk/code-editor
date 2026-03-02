@@ -20,7 +20,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   { id: 'bone', label: 'Bone', color: '#78716c', group: 'core' },
   { id: 'caffeine', label: 'Caffeine', color: '#c49a5c', group: 'tweakcn' },
   { id: 'claymorphism', label: 'Claymorphism', color: '#b48ead', group: 'tweakcn' },
-  { id: 'vercel', label: 'Vercel', color: '#ededed', group: 'tweakcn' },
+  { id: 'vercel', label: 'Ghost (OpenAI)', color: '#9ca3af', group: 'tweakcn' },
   { id: 'vintage-paper', label: 'Vintage Paper', color: '#8b5e3c', group: 'tweakcn' },
   { id: 'voodoo', label: 'VooDoo', color: '#8b5cf6', group: 'core' },
   { id: 'cybernord', label: 'CyberNord', color: '#00ff41', group: 'tweakcn' },

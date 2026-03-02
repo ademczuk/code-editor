@@ -11,7 +11,7 @@ import { useView, type ViewId } from '@/context/view-context'
 import { WorkspaceSidebar } from '@/components/workspace-sidebar'
 import { isTauri } from '@/lib/tauri'
 import { fetchFileContentsByName as fetchFileContents, commitFilesByName as commitFiles } from '@/lib/github-api'
-import { PluginSlotRenderer } from '@/context/plugin-context'
+import { PluginSlotRenderer, usePlugins } from '@/context/plugin-context'
 import { usePreview } from '@/context/preview-context'
 import { SpotifyPlugin } from '@/components/plugins/spotify/spotify-plugin'
 import { BranchPicker } from '@/components/branch-picker'
@@ -49,6 +49,39 @@ const VIEW_ICONS: Record<string, { icon: string; label: string }> = {
 }
 
 const VISIBLE_VIEWS: ViewId[] = ['editor', 'preview', 'workflows', 'grid', 'git', 'prs']
+
+function SidebarPluginSlot() {
+  const { slots } = usePlugins()
+  const entries = slots.sidebar
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem('ce:sidebar-plugins-collapsed') === 'true' } catch { return false }
+  })
+  useEffect(() => { try { localStorage.setItem('ce:sidebar-plugins-collapsed', String(collapsed)) } catch {} }, [collapsed])
+  if (entries.length === 0) return null
+  return (
+    <div className={`shrink-0 flex flex-col rounded-xl border border-[var(--border)] bg-[var(--bg)] overflow-hidden transition-[width] duration-200 ${collapsed ? 'w-[48px]' : 'w-[220px]'}`}>
+      {collapsed ? (
+        <div className="flex flex-col items-center pt-3 gap-2">
+          {entries.map(e => (
+            <button key={e.id} onClick={() => setCollapsed(false)} className="p-2 rounded-md hover:bg-[var(--bg-subtle)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] cursor-pointer" title="Expand">
+              <Icon icon="simple-icons:spotify" width={16} height={16} />
+            </button>
+          ))}
+        </div>
+      ) : (
+        <>
+          {entries.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(e => {
+            const C = e.component
+            return <C key={e.id} />
+          })}
+          <button onClick={() => setCollapsed(true)} className="h-6 flex items-center justify-center text-[var(--text-disabled)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] cursor-pointer shrink-0" title="Collapse">
+            <Icon icon="lucide:panel-right-close" width={12} height={12} />
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
 
 export default function EditorLayout() {
   const { status } = useGateway()
@@ -521,6 +554,9 @@ export default function EditorLayout() {
         </footer>
       </div>
 
+      {/* Sidebar plugins (Spotify, etc.) */}
+      <SidebarPluginSlot />
+
       {/* Plugins */}
       <SpotifyPlugin />
       <PipWindow />
@@ -541,7 +577,28 @@ export default function EditorLayout() {
       <CommandPalette
         open={commandPaletteVisible}
         onClose={() => setCommandPaletteVisible(false)}
-        onRun={() => setCommandPaletteVisible(false)}
+        onRun={(cmdId) => {
+          setCommandPaletteVisible(false)
+          switch (cmdId) {
+            // Layout toggles
+            case 'toggle-files': window.dispatchEvent(new CustomEvent('cmd:toggle-files')); break
+            case 'toggle-terminal': window.dispatchEvent(new CustomEvent('toggle-terminal')); break
+            case 'toggle-engine': window.dispatchEvent(new CustomEvent('cmd:toggle-engine')); break
+            case 'toggle-chat': window.dispatchEvent(new CustomEvent('cmd:toggle-chat')); break
+            case 'collapse-editor': window.dispatchEvent(new CustomEvent('cmd:collapse-editor')); break
+            // Layout presets
+            case 'layout-focus': window.dispatchEvent(new CustomEvent('cmd:layout-preset', { detail: 'focus' })); break
+            case 'layout-review': window.dispatchEvent(new CustomEvent('cmd:layout-preset', { detail: 'review' })); break
+            case 'layout-build': window.dispatchEvent(new CustomEvent('cmd:layout-preset', { detail: 'build' })); break
+            // Navigation
+            case 'view-editor': setView('editor'); break
+            case 'view-git': setView('git'); break
+            case 'view-prs': setView('prs'); break
+            case 'view-settings': setView('settings'); break
+            // File operations
+            case 'find-files': setQuickOpenVisible(true); break
+          }
+        }}
       />
       <ShortcutsOverlay open={shortcutsVisible} onClose={() => setShortcutsVisible(false)} />
       {settingsVisible && activeView !== 'settings' && (

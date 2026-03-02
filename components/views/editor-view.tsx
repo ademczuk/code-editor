@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import { Icon } from '@iconify/react'
 import { useEditor } from '@/context/editor-context'
@@ -66,6 +66,81 @@ export function EditorView() {
     window.addEventListener('open-side-chat', handler)
     return () => window.removeEventListener('open-side-chat', handler)
   }, [])
+
+  // Command palette events
+  useEffect(() => {
+    const toggleFiles = () => setTreeVisible(v => !v)
+    const toggleEngine = () => setEngineVisible(v => !v)
+    const toggleChat = () => setChatVisible(v => !v)
+    const collapseEditor = () => setEditorCollapsed(true)
+    const layoutPreset = (e: Event) => {
+      const preset = (e as CustomEvent).detail as string
+      switch (preset) {
+        case 'focus':
+          setTreeVisible(false); setEngineVisible(false); setChatVisible(false); setEditorCollapsed(false)
+          window.dispatchEvent(new CustomEvent('hide-terminal'))
+          break
+        case 'review':
+          setTreeVisible(true); setEngineVisible(false); setChatVisible(true); setEditorCollapsed(false)
+          window.dispatchEvent(new CustomEvent('hide-terminal'))
+          break
+        case 'build':
+          setTreeVisible(false); setEngineVisible(true); setChatVisible(false); setEditorCollapsed(false)
+          window.dispatchEvent(new CustomEvent('show-terminal'))
+          break
+      }
+    }
+    window.addEventListener('cmd:toggle-files', toggleFiles)
+    window.addEventListener('cmd:toggle-engine', toggleEngine)
+    window.addEventListener('cmd:toggle-chat', toggleChat)
+    window.addEventListener('cmd:collapse-editor', collapseEditor)
+    window.addEventListener('cmd:layout-preset', layoutPreset)
+    return () => {
+      window.removeEventListener('cmd:toggle-files', toggleFiles)
+      window.removeEventListener('cmd:toggle-engine', toggleEngine)
+      window.removeEventListener('cmd:toggle-chat', toggleChat)
+      window.removeEventListener('cmd:collapse-editor', collapseEditor)
+      window.removeEventListener('cmd:layout-preset', layoutPreset)
+    }
+  }, [])
+
+  // ─── Status chip state ───
+  const [terminalActive, setTerminalActive] = useState(false)
+  const [agentUnread, setAgentUnread] = useState(false)
+  const [engineRunning, setEngineRunning] = useState(false)
+
+  useEffect(() => {
+    const onTerminal = (e: Event) => setTerminalActive((e as CustomEvent).detail?.active ?? true)
+    const onAgent = () => { if (!chatVisible) setAgentUnread(true) }
+    const onEngine = (e: Event) => setEngineRunning((e as CustomEvent).detail?.running ?? false)
+    window.addEventListener('terminal-activity', onTerminal)
+    window.addEventListener('agent-reply', onAgent)
+    window.addEventListener('engine-status', onEngine)
+    return () => {
+      window.removeEventListener('terminal-activity', onTerminal)
+      window.removeEventListener('agent-reply', onAgent)
+      window.removeEventListener('engine-status', onEngine)
+    }
+  }, [chatVisible])
+
+  // Clear unread when chat opens
+  useEffect(() => { if (chatVisible) setAgentUnread(false) }, [chatVisible])
+
+  // ─── Active rail ref ───
+  const segmentRef = useRef<HTMLDivElement>(null)
+  const [railStyle, setRailStyle] = useState<{ left: number; width: number } | null>(null)
+
+  const updateRail = useCallback(() => {
+    if (!segmentRef.current) return
+    const active = segmentRef.current.querySelector('[data-active="true"]') as HTMLElement | null
+    if (active) {
+      setRailStyle({ left: active.offsetLeft, width: active.offsetWidth })
+    } else {
+      setRailStyle(null)
+    }
+  }, [])
+
+  useLayoutEffect(() => { updateRail() }, [treeVisible, engineVisible, updateRail])
 
   const hasFiles = files.length > 0 || activeFile
   const branchName = repo?.branch ?? local.gitInfo?.branch ?? null
@@ -180,28 +255,53 @@ export function EditorView() {
             )}
 
             {/* Bottom bar */}
-            <div className="flex items-center h-7 px-2.5 border-t border-[var(--border)] bg-[var(--bg-elevated)] shrink-0 gap-1">
-              <button onClick={() => setTreeVisible(v => !v)} className={`p-1 rounded hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] cursor-pointer ${treeVisible ? 'text-[var(--text-secondary)]' : 'text-[var(--text-disabled)]'}`} title="Explorer (⌘B)">
-                <Icon icon="lucide:folder" width={13} height={13} />
+            <div className="flex items-center h-8 px-2.5 border-t border-[var(--border)] bg-[var(--bg-elevated)] shrink-0 gap-1.5">
+              {/* Segmented toggle group with animated active rail */}
+              <div ref={segmentRef} className="relative inline-flex items-center rounded-md bg-[color-mix(in_srgb,var(--text-primary)_6%,transparent)] p-[2px] gap-[2px]">
+                {/* Active rail indicator */}
+                {railStyle && (
+                  <span
+                    className="absolute top-[2px] h-[calc(100%-4px)] rounded bg-[var(--bg)] shadow-sm pointer-events-none transition-all duration-200 ease-out z-0"
+                    style={{ left: railStyle.left, width: railStyle.width }}
+                  />
+                )}
+
+                <button data-active={treeVisible} onClick={() => setTreeVisible(v => !v)} className={`relative z-[1] h-6 px-2 rounded text-[10px] flex items-center gap-1 cursor-pointer transition-colors ${treeVisible ? 'text-[var(--text-primary)]' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)]'}`} title="Explorer (⌘B)">
+                  <Icon icon="lucide:folder" width={12} height={12} />
+                  <span>Files</span>
+                </button>
+                <button onClick={() => window.dispatchEvent(new CustomEvent('toggle-terminal'))} className="relative z-[1] h-6 px-2 rounded text-[10px] flex items-center gap-1 cursor-pointer transition-colors text-[var(--text-disabled)] hover:text-[var(--text-secondary)]" title="Terminal (⌘J)">
+                  <Icon icon="lucide:terminal" width={12} height={12} />
+                  <span>Terminal</span>
+                  {terminalActive && <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />}
+                </button>
+                <button data-active={engineVisible} onClick={() => setEngineVisible(v => !v)} className={`relative z-[1] h-6 px-2 rounded text-[10px] flex items-center gap-1 cursor-pointer transition-colors ${engineVisible ? 'text-[var(--text-primary)]' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)]'}`} title="Engine">
+                  <Icon icon="lucide:cpu" width={12} height={12} />
+                  <span>Engine</span>
+                  {engineRunning && <Icon icon="lucide:loader-2" width={9} height={9} className="animate-spin text-[var(--brand)]" />}
+                </button>
+              </div>
+
+              <button onClick={() => setEditorCollapsed(true)} className="h-6 px-2 rounded text-[10px] flex items-center gap-1 hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] cursor-pointer text-[var(--text-disabled)]" title="Collapse editor (⌘E)">
+                <Icon icon="lucide:panel-left-close" width={12} height={12} />
+                <span>Collapse</span>
               </button>
-              <button onClick={() => window.dispatchEvent(new CustomEvent('toggle-terminal'))} className="p-1 rounded hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] cursor-pointer text-[var(--text-disabled)]" title="Terminal (⌘J)">
-                <Icon icon="lucide:terminal" width={13} height={13} />
-              </button>
-              <button onClick={() => setEngineVisible(v => !v)} className={`p-1 rounded hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] cursor-pointer ${engineVisible ? 'text-[var(--text-secondary)]' : 'text-[var(--text-disabled)]'}`} title="Engine">
-                <Icon icon="lucide:cpu" width={13} height={13} />
-              </button>
-              <button onClick={() => setEditorCollapsed(true)} className="p-1 rounded hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] cursor-pointer text-[var(--text-disabled)]" title="Collapse editor (⌘E)">
-                <Icon icon="lucide:panel-left-close" width={13} height={13} />
-              </button>
+
               <div className="flex-1" />
-              <button onClick={() => setChatVisible(v => !v)} className={`p-1 rounded hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] cursor-pointer ${chatVisible ? 'text-[var(--brand)]' : 'text-[var(--text-disabled)]'}`} title="Chat (⌘I)">
-                <Icon icon="lucide:message-square" width={13} height={13} />
-              </button>
+
               {branchName && (
                 <span className="text-[10px] font-mono text-[var(--text-disabled)] flex items-center gap-1 ml-1">
                   <Icon icon="lucide:git-branch" width={12} height={12} />{branchName}
                 </span>
               )}
+
+              <button onClick={() => setChatVisible(v => !v)} className={`relative h-6 px-2 rounded text-[10px] flex items-center gap-1 cursor-pointer transition-colors ${chatVisible ? 'bg-[color-mix(in_srgb,var(--brand)_14%,transparent)] text-[var(--brand)]' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)] hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)]'}`} title="Chat (⌘I)">
+                <Icon icon="lucide:message-square" width={12} height={12} />
+                <span>Agent</span>
+                {agentUnread && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[var(--brand)] animate-pulse ring-2 ring-[var(--bg-elevated)]" />
+                )}
+              </button>
             </div>
           </div>
         </>
