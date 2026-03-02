@@ -1,7 +1,8 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, useMemo, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from 'react'
 import { useGateway } from '@/context/gateway-context'
+import { WorkflowExecutionEngine } from '@/lib/workflow-engine'
 
 // ── Workflow Types ───────────────────────────────────────────
 
@@ -122,6 +123,19 @@ interface WorkflowContextValue {
   // Execution
   runWorkflow: (id: string) => void
   stopWorkflow: (id: string) => void
+
+  // Execution
+  runWorkflow: (id: string) => void
+  stopWorkflow: (id: string) => void
+  approveHumanNode: (nodeId: string) => void
+  rejectHumanNode: (nodeId: string) => void
+  executionLog: string[]
+
+  // Node inspector
+  selectedNodeId: string | null
+  setSelectedNodeId: (id: string | null) => void
+  updateNodeConfig: (workflowId: string, nodeId: string, config: Record<string, unknown>) => void
+  updateNodePosition: (workflowId: string, nodeId: string, x: number, y: number) => void
 
   // View state
   viewMode: 'workflows' | 'traces' | 'analytics'
@@ -289,7 +303,11 @@ function generateDemoData() {
 // ── Provider ────────────────────────────────────────────────
 
 export function WorkflowProvider({ children }: { children: ReactNode }) {
+  const { sendRequest, onEvent, status: gwStatus } = useGateway()
   const [viewMode, setViewMode] = useState<'workflows' | 'traces' | 'analytics'>('workflows')
+  const [executionLog, setExecutionLog] = useState<string[]>([])
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const engineRef = useRef<WorkflowExecutionEngine | null>(null)
   const demo = useMemo(() => generateDemoData(), [])
   const [workflows, setWorkflows] = useState<Workflow[]>(demo.workflows)
   const [traces, setTraces] = useState<TraceRun[]>(demo.traces)
@@ -351,13 +369,72 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     updateWorkflow(workflowId, { edges: wf.edges.filter(e => e.id !== edgeId) })
   }, [workflows, updateWorkflow])
 
+  const updateNodeConfig = useCallback((workflowId: string, nodeId: string, config: Record<string, unknown>) => {
+    setWorkflows(prev => prev.map(w => {
+      if (w.id !== workflowId) return w
+      return { ...w, nodes: w.nodes.map(n => n.id === nodeId ? { ...n, config: { ...n.config, ...config } } : n), updatedAt: Date.now() }
+    }))
+  }, [])
+
+  const updateNodePosition = useCallback((workflowId: string, nodeId: string, x: number, y: number) => {
+    setWorkflows(prev => prev.map(w => {
+      if (w.id !== workflowId) return w
+      return { ...w, nodes: w.nodes.map(n => n.id === nodeId ? { ...n, x, y } : n) }
+    }))
+  }, [])
+
   const runWorkflow = useCallback((id: string) => {
-    updateWorkflow(id, { status: 'running' })
-  }, [updateWorkflow])
+    const wf = workflows.find(w => w.id === id)
+    if (!wf || gwStatus !== 'connected') {
+      if (gwStatus !== 'connected') setExecutionLog(prev => [...prev, '⚠ Gateway not connected — connect first'])
+      return
+    }
+
+    // Reset all node statuses
+    setWorkflows(prev => prev.map(w => w.id === id ? { ...w, status: 'running' as RunStatus, nodes: w.nodes.map(n => ({ ...n, status: 'idle' as NodeStatus })) } : w))
+    setExecutionLog([])
+
+    const engine = new WorkflowExecutionEngine(sendRequest, onEvent, {
+      onNodeStatusChange: (nodeId, status, data) => {
+        setWorkflows(prev => prev.map(w => {
+          if (w.id !== id) return w
+          return { ...w, nodes: w.nodes.map(n => n.id === nodeId ? { ...n, status, duration: data?.duration, tokens: data?.tokens } : n) }
+        }))
+      },
+      onWorkflowStatusChange: (status) => {
+        setWorkflows(prev => prev.map(w => w.id === id ? { ...w, status, lastRunAt: Date.now(), runCount: w.runCount + (status === 'completed' || status === 'failed' ? 1 : 0) } : w))
+      },
+      onTraceStep: (step) => {
+        // Will be collected in the trace run
+      },
+      onLog: (msg) => {
+        setExecutionLog(prev => [...prev.slice(-50), msg])
+      },
+    })
+
+    engineRef.current = engine
+
+    // Execute and store the trace
+    engine.execute(wf).then(trace => {
+      setTraces(prev => [trace, ...prev])
+      engineRef.current = null
+    })
+  }, [workflows, gwStatus, sendRequest, onEvent])
 
   const stopWorkflow = useCallback((id: string) => {
-    updateWorkflow(id, { status: 'idle' })
+    engineRef.current?.abort()
+    engineRef.current = null
+    updateWorkflow(id, { status: 'cancelled' as RunStatus })
+    setExecutionLog(prev => [...prev, '⏹ Workflow stopped'])
   }, [updateWorkflow])
+
+  const approveHumanNode = useCallback((nodeId: string) => {
+    engineRef.current?.approveHumanNode(nodeId)
+  }, [])
+
+  const rejectHumanNode = useCallback((nodeId: string) => {
+    engineRef.current?.rejectHumanNode(nodeId)
+  }, [])
 
   const value = useMemo<WorkflowContextValue>(() => ({
     workflows, activeWorkflow, setActiveWorkflow,
@@ -366,6 +443,10 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     traces, activeTrace, setActiveTrace,
     analytics,
     runWorkflow, stopWorkflow,
+    approveHumanNode, rejectHumanNode,
+    executionLog,
+    selectedNodeId, setSelectedNodeId,
+    updateNodeConfig, updateNodePosition,
     viewMode, setViewMode,
   }), [
     workflows, activeWorkflow, setActiveWorkflow,
@@ -373,6 +454,10 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     addNode, removeNode, addEdge, removeEdge,
     traces, activeTrace, setActiveTrace,
     analytics, runWorkflow, stopWorkflow,
+    approveHumanNode, rejectHumanNode,
+    executionLog,
+    selectedNodeId, setSelectedNodeId,
+    updateNodeConfig, updateNodePosition,
     viewMode, setViewMode,
   ])
 

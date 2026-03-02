@@ -183,6 +183,15 @@ pub fn local_git_branches(root: String) -> Result<Vec<String>, String> {
 
 #[tauri::command]
 pub fn local_git_checkout(root: String, branch: String) -> Result<String, String> {
-    run_git(&root, &["checkout", &branch])
-        .or_else(|_| run_git(&root, &["checkout", "-b", &branch]))
+    match run_git(&root, &["checkout", &branch]) {
+        Ok(out) => Ok(out),
+        Err(checkout_err) => {
+            let branch_exists = run_git(&root, &["rev-parse", "--verify", &branch]).is_ok();
+            if branch_exists {
+                Err(checkout_err)
+            } else {
+                run_git(&root, &["checkout", "-b", &branch])
+            }
+        }
+    }
 }
