@@ -107,11 +107,21 @@ export function buildEditorContext(params: {
   activeFileLanguage?: string
   openFiles?: Array<{ path: string; dirty: boolean }>
   selection?: { startLine: number; endLine: number; text: string }
+  runtime?: 'local' | 'worktree' | 'cloud'
+  permissions?: 'default' | 'full'
 }): string {
   const parts: string[] = []
 
   if (params.repoFullName) {
     parts.push(`[Repository: ${params.repoFullName} (${params.branch ?? 'main'})]`)
+  }
+
+  if (params.runtime && params.runtime !== 'local') {
+    parts.push(`[Runtime: ${params.runtime}]`)
+  }
+
+  if (params.permissions === 'full') {
+    parts.push('[Permissions: full access — edits will be auto-applied without review]')
   }
 
   if (params.activeFilePath && params.activeFileContent) {

@@ -13,6 +13,7 @@ import { isTauri } from '@/lib/tauri'
 import { fetchFileContentsByName as fetchFileContents, commitFilesByName as commitFiles } from '@/lib/github-api'
 import { PluginSlotRenderer } from '@/context/plugin-context'
 import { SpotifyPlugin } from '@/components/plugins/spotify/spotify-plugin'
+import { BranchPicker } from '@/components/branch-picker'
 
 // View components — lazy loaded
 const ChatView = dynamic(() => import('@/components/views/chat-view').then(m => ({ default: m.ChatView })), { ssr: false })
@@ -289,7 +290,7 @@ export default function EditorLayout() {
     <div className="flex h-full w-full bg-[var(--bg)] text-[var(--text-primary)] overflow-hidden">
       {/* Tauri drag region */}
       {isTauriDesktop && (
-        <div data-tauri-drag-region className="tauri-drag-region fixed top-0 left-0 right-0 h-3 z-[9999]" />
+        <div data-tauri-drag-region className="tauri-drag-region fixed top-0 left-0 right-0 h-10 z-[9999] pointer-events-none" />
       )}
 
       {/* Workspace Sidebar */}
@@ -306,9 +307,9 @@ export default function EditorLayout() {
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
         {/* View navigation bar */}
-        <div className={`flex items-center h-10 border-b border-[var(--border)] bg-[var(--bg-elevated)] shrink-0 px-2.5 gap-1 ${isMacTauri && sidebarCollapsed ? 'pl-20' : ''}`}>
+        <div data-tauri-drag-region className={`flex items-center h-10 border-b border-[var(--border)] bg-[var(--bg-elevated)] shrink-0 px-2.5 gap-1 tauri-drag-region ${isMacTauri && sidebarCollapsed ? 'pl-20' : ''}`}>
           {/* View tabs with sliding indicator */}
-          <div ref={tabContainerRef} className="relative flex items-center gap-1">
+          <div ref={tabContainerRef} className="relative flex items-center gap-1 tauri-no-drag">
             <span
               className="absolute top-1/2 -translate-y-1/2 h-[28px] rounded-md bg-[var(--bg-subtle)] transition-all duration-300 pointer-events-none"
               style={{
@@ -333,7 +334,7 @@ export default function EditorLayout() {
                 <Icon icon={VIEW_ICONS[v].icon} width={15} height={15} />
                 <span className="hidden sm:inline">{VIEW_ICONS[v].label}</span>
                 {v === 'git' && dirtyCount > 0 && (
-                  <span className="px-1 min-w-[16px] text-center rounded-full bg-[var(--brand)] text-white text-[9px] leading-[16px] animate-badge-pop">{dirtyCount}</span>
+                  <span className="px-1 min-w-[16px] text-center rounded-full bg-[var(--brand)] text-[var(--brand-contrast)] text-[9px] leading-[16px] animate-badge-pop">{dirtyCount}</span>
                 )}
               </button>
             ))}
@@ -342,7 +343,7 @@ export default function EditorLayout() {
           <div className="flex-1 tauri-drag-region" data-tauri-drag-region />
 
           {/* Settings */}
-          <button onClick={() => setSettingsVisible(true)} className="p-1.5 rounded hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] cursor-pointer transition-colors" title="Settings">
+          <button onClick={() => setSettingsVisible(true)} className="tauri-no-drag p-1.5 rounded hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] cursor-pointer transition-colors" title="Settings">
             <Icon icon="lucide:settings" width={16} height={16} className="animate-gear-sway" />
           </button>
         </div>
@@ -386,18 +387,7 @@ export default function EditorLayout() {
         {/* Status bar */}
         <footer className="flex items-center justify-between px-3 h-[22px] border-t border-[var(--border)] bg-[var(--bg-elevated)] text-[10px] text-[var(--text-tertiary)] shrink-0">
           <div className="flex items-center gap-3">
-            {repo && (
-              <span className="flex items-center gap-1 font-mono text-[var(--text-secondary)]">
-                <Icon icon="lucide:git-branch" width={10} height={10} className="text-[var(--brand)]" />
-                {repo.branch}
-              </span>
-            )}
-            {localMode && gitInfo?.branch && (
-              <span className="flex items-center gap-1 font-mono text-[var(--text-secondary)]">
-                <Icon icon="lucide:git-branch" width={10} height={10} className="text-[var(--brand)]" />
-                {gitInfo.branch}
-              </span>
-            )}
+            <BranchPicker />
             {dirtyCount > 0 && (
               <span key={dirtyCount} className="flex items-center gap-1 text-[var(--warning,#eab308)] animate-badge-pop">
                 <Icon icon="lucide:circle-dot" width={8} height={8} />

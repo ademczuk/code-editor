@@ -6,6 +6,9 @@ import { ModeSelector } from '@/components/mode-selector'
 import { ChatHome } from '@/components/chat-home'
 import { ChatHeader } from '@/components/chat-header'
 import type { AgentMode } from '@/components/mode-selector'
+import { RuntimeSelector } from '@/components/runtime-selector'
+import { PermissionsToggle, usePermissions } from '@/components/permissions-toggle'
+import { useRuntime } from '@/components/runtime-selector'
 import { useGateway } from '@/context/gateway-context'
 import { useEditor } from '@/context/editor-context'
 import { useRepo } from '@/context/repo-context'
@@ -143,6 +146,8 @@ export function AgentPanel() {
   const { files, activeFile, getFile, openFile, updateFileContent } = useEditor()
   const { repo, tree: repoTree } = useRepo()
   const local = useLocal()
+  const permissions = usePermissions()
+  const runtime = useRuntime()
 
   const [chatId, setChatId] = useState(() => crypto.randomUUID())
   // Each chat gets its own gateway session for isolation
@@ -562,8 +567,10 @@ export function AgentPanel() {
       activeFileContent: file?.content,
       activeFileLanguage: file?.language,
       openFiles: files.map(f => ({ path: f.path, dirty: f.dirty })),
+      runtime,
+      permissions,
     })
-  }, [repo, activeFile, files, getFile])
+  }, [repo, activeFile, files, getFile, runtime, permissions])
 
 
   // ─── Message helpers ──────────────────────────────────────────
@@ -903,6 +910,30 @@ export function AgentPanel() {
     })
     setActiveDiff(null)
   }, [activeDiff, appendMessage])
+
+  // ─── Auto-apply when full access is enabled ──────────────────
+  const autoAppliedRef = useRef(new Set<string>())
+  useEffect(() => {
+    if (permissions !== 'full') return
+    const last = messages[messages.length - 1]
+    if (!last || last.role !== 'assistant' || !last.editProposals?.length) return
+    if (autoAppliedRef.current.has(last.id)) return
+    autoAppliedRef.current.add(last.id)
+    for (const proposal of last.editProposals) {
+      const existing = getFile(proposal.filePath)
+      if (existing) {
+        updateFileContent(proposal.filePath, proposal.content)
+      } else {
+        openFile(proposal.filePath, proposal.content, undefined)
+      }
+    }
+    const fileNames = last.editProposals.map(p => `\`${p.filePath}\``).join(', ')
+    appendMessage({
+      id: crypto.randomUUID(), role: 'system',
+      content: `Auto-applied edits to ${fileNames} (full access mode).`,
+      timestamp: Date.now(),
+    })
+  }, [messages, permissions, getFile, updateFileContent, openFile, appendMessage])
 
   // ─── Slash command suggestions ────────────────────────────────
   const suggestions = useMemo(() => {
@@ -1377,51 +1408,56 @@ export function AgentPanel() {
             </button>
           </div>
         </div>
-        {/* Bottom bar — mode selector + model + context tokens */}
-        <div className="flex items-center justify-between mt-1.5 px-0.5">
-          <div className="flex items-center gap-2.5">
+        {/* Bottom bar — runtime + permissions + mode selector + model + context tokens */}
+        <div className="flex items-center justify-between mt-1.5">
+          <div className="flex items-center gap-1.5">
+            <RuntimeSelector />
+            <PermissionsToggle />
             <ModeSelector mode={agentMode} onChange={setAgentMode} />
+          </div>
+          <div className="flex items-center gap-2">
             {modelInfo.current && (
               <div className="relative">
                 <button
                   onClick={() => setModelMenuOpen(v => !v)}
-                  className="flex items-center gap-1 text-[11px] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors cursor-pointer"
+                  className="flex items-center gap-1 text-[10px] text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] transition-colors cursor-pointer"
                 >
-                  <Icon icon="lucide:sparkles" width={12} height={12} />
+                  <Icon icon="lucide:sparkles" width={11} height={11} />
                   {modelInfo.current.replace(/^.*\//, '').replace(/(claude-|gpt-)/, '').slice(0, 12)}
-                  <Icon icon="lucide:chevron-down" width={10} height={10} />
+                  <Icon icon="lucide:chevron-down" width={9} height={9} />
                 </button>
                 {modelMenuOpen && (
-                  <div className="absolute bottom-full left-0 mb-1 w-52 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg shadow-xl py-1 z-50">
-                    {modelInfo.available.slice(0, 4).map(m => (
-                      <button
-                        key={m}
-                        onClick={() => {
-                          setModelMenuOpen(false)
-                        }}
-                        className={`w-full text-left px-3 py-2 text-[12px] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer ${
-                          m === modelInfo.current ? 'text-[var(--brand)]' : 'text-[var(--text-secondary)]'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          {m === modelInfo.current && <Icon icon="lucide:check" width={12} height={12} />}
-                          <span className="font-mono">{m.replace(/^.*\//, '')}</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setModelMenuOpen(false)} />
+                    <div className="absolute bottom-full left-0 mb-1 w-52 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl shadow-xl py-1 z-50">
+                      {modelInfo.available.slice(0, 4).map(m => (
+                        <button
+                          key={m}
+                          onClick={() => { setModelMenuOpen(false) }}
+                          className={`w-full text-left px-3 py-2 text-[12px] hover:bg-[color-mix(in_srgb,var(--text-primary)_4%,transparent)] transition-colors cursor-pointer ${
+                            m === modelInfo.current ? 'text-[var(--brand)]' : 'text-[var(--text-secondary)]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            {m === modelInfo.current && <Icon icon="lucide:check" width={12} height={12} />}
+                            <span className="font-mono">{m.replace(/^.*\//, '')}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
             )}
-          </div>
-          <div className="flex items-center gap-2.5">
+            {contextTokens > 0 && (
+              <span className="text-[10px] text-[var(--text-disabled)] tabular-nums">
+                ~{(contextTokens / 1000).toFixed(1)}k ctx
+              </span>
+            )}
             <span className="text-[10px] text-[var(--text-disabled)]">
-              {contextTokens > 0 ? `~${(contextTokens / 1000).toFixed(1)}k ctx` : ''}
-            </span>
-            <span className="text-[10px] text-[var(--text-disabled)]">
-              <kbd className="px-1 rounded border border-[var(--border)] text-[9px]">@</kbd> files
-              <span className="mx-0.5">·</span>
-              <kbd className="px-1 rounded border border-[var(--border)] text-[9px]">/</kbd> cmds
+              <kbd className="px-1 py-px rounded border border-[var(--border)] text-[9px] font-mono">@</kbd>
+              <span className="mx-1">·</span>
+              <kbd className="px-1 py-px rounded border border-[var(--border)] text-[9px] font-mono">/</kbd>
             </span>
           </div>
         </div>

@@ -164,7 +164,6 @@ export async function fetchBranches(
   while (page <= 5) {
     const res = await ghFetch(
       `https://api.github.com/repos/${owner}/${repo}/branches?per_page=100&page=${page}`
-      .replace('${o}', owner).replace('${r}', repo)
     )
     if (!res.ok) break
     const data = (await res.json()) as Array<{ name: string; protected: boolean }>

@@ -264,7 +264,7 @@ Then click Connect again in the editor.
 **Symptom:** Page keeps redirecting to WorkOS login and back.
 
 **Fix:** Check that `WORKOS_CLIENT_ID`, `WORKOS_API_KEY`, and `WORKOS_REDIRECT_URI` are set correctly in environment variables.
-
+   
 For local development, the redirect URI should be `http://localhost:3000/callback`.
 
 ---

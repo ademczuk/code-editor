@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
+    "build:static": "next build",
     "start": "npx serve out",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
