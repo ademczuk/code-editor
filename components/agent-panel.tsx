@@ -286,6 +286,9 @@ export function AgentPanel() {
       // Match by idempotency key or session key fallback
       const matchesIdem = !!(idempotencyKey && sentKeysRef.current.has(idempotencyKey))
       const matchesSession = !idempotencyKey && eventSessionKey === sessionKey
+      if (typeof window !== 'undefined' && state) {
+        console.debug('[knot-code] chat event:', { state, idempotencyKey, eventSessionKey, matchesIdem, matchesSession, sentKeys: [...sentKeysRef.current] })
+      }
       if (!matchesIdem && !matchesSession) return
 
       // Track tool_use events for thinking trail
@@ -757,13 +760,14 @@ export function AgentPanel() {
 
       setIsStreaming(true)
       const resp = (await sendRequest('chat.send', {
-        sessionKey: CODE_EDITOR_SESSION_KEY,
+        sessionKey,
         message: fullMessage,
         idempotencyKey: idemKey,
       })) as Record<string, unknown> | undefined
 
+      if (typeof window !== 'undefined') console.debug('[knot-code] chat.send response:', resp)
       const respStatus = resp?.status as string | undefined
-      if (respStatus === 'started' || respStatus === 'in_flight') {
+      if (respStatus === 'started' || respStatus === 'in_flight' || respStatus === 'streaming') {
         // Streaming — reply will arrive via onEvent('chat') handler
         return
       }
@@ -774,7 +778,11 @@ export function AgentPanel() {
       sentKeysRef.current.delete(idemKey)
       handledKeysRef.current.add(idemKey)
       setTimeout(() => handledKeysRef.current.delete(idemKey), 10000)
-      const reply = String(resp?.reply ?? resp?.text ?? '')
+      const reply = String(resp?.reply ?? resp?.text ?? resp?.content ?? '')
+      if (!reply && respStatus) {
+        // Gateway acknowledged but no inline reply — likely streaming
+        return
+      }
       if (reply && !/^NO_REPLY$/i.test(reply.trim())) {
         const editProposals = parseEditProposals(reply)
         appendMessage({
@@ -829,7 +837,7 @@ export function AgentPanel() {
       setIsStreaming(true)
 
       sendRequest('chat.send', {
-        sessionKey: CODE_EDITOR_SESSION_KEY,
+        sessionKey,
         message: fullMessage,
         idempotencyKey: idemKey,
       }).then((resp) => {
