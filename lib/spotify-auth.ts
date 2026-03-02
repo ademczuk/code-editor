@@ -1,7 +1,7 @@
 import { isTauri } from '@/lib/tauri'
 
 const SPOTIFY_CLIENT_ID = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID ?? ''
-const SCOPES = 'streaming user-read-playback-state user-modify-playback-state user-read-currently-playing'
+const SCOPES = 'streaming user-read-playback-state user-modify-playback-state user-read-currently-playing playlist-read-private playlist-read-collaborative'
 const TOKEN_KEY = 'knot:spotify-token'
 const REFRESH_KEY = 'knot:spotify-refresh'
 const EXPIRY_KEY = 'knot:spotify-expiry'

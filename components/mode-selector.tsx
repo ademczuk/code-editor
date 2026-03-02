@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useLayoutEffect, useState } from 'react'
+import { useRef, useLayoutEffect, useEffect, useState, useCallback } from 'react'
 import { Icon } from '@iconify/react'
 
 export type AgentMode = 'plan' | 'code' | 'agent'
@@ -22,29 +22,46 @@ export function ModeSelector({ mode, onChange, size = 'sm' }: Props) {
   const btnRefs = useRef<(HTMLButtonElement | null)[]>([])
   const [pill, setPill] = useState({ left: 0, width: 0 })
 
-  useLayoutEffect(() => {
+  const recalcPill = useCallback(() => {
     const idx = MODES.findIndex(m => m.id === mode)
     const btn = btnRefs.current[idx]
     const container = containerRef.current
     if (btn && container) {
       const cRect = container.getBoundingClientRect()
       const bRect = btn.getBoundingClientRect()
-      setPill({ left: bRect.left - cRect.left, width: bRect.width })
+      if (bRect.width > 0) {
+        setPill({ left: bRect.left - cRect.left, width: bRect.width })
+      }
     }
   }, [mode])
+
+  useLayoutEffect(recalcPill, [recalcPill])
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const ro = new ResizeObserver(recalcPill)
+    ro.observe(container)
+    for (const btn of btnRefs.current) {
+      if (btn) ro.observe(btn)
+    }
+    return () => ro.disconnect()
+  }, [recalcPill])
 
   const isMd = size === 'md'
 
   return (
     <div
       ref={containerRef}
-      className={`relative inline-flex items-center rounded-[10px] bg-[color-mix(in_srgb,var(--text-primary)_4%,transparent)] ${
+      className={`relative inline-flex items-center rounded-[10px] bg-[color-mix(in_srgb,var(--text-primary)_6%,transparent)] ${
         isMd ? 'gap-0.5 p-[3px]' : 'gap-px p-[2px]'
       }`}
     >
       <span
-        className={`absolute rounded-lg bg-[var(--bg-elevated)] pointer-events-none ${
-          isMd ? 'top-[3px] h-[calc(100%-6px)] shadow-[0_1px_3px_rgba(0,0,0,0.08),0_0_0_1px_var(--border)]' : 'top-[2px] h-[calc(100%-4px)] shadow-[0_1px_2px_rgba(0,0,0,0.06),0_0_0_1px_var(--border)]'
+        className={`absolute rounded-lg pointer-events-none bg-[color-mix(in_srgb,var(--text-primary)_10%,var(--bg))] ${
+          isMd
+            ? 'top-[3px] h-[calc(100%-6px)] shadow-[0_1px_3px_rgba(0,0,0,0.12),0_0_0_1px_color-mix(in_srgb,var(--text-primary)_12%,transparent)]'
+            : 'top-[2px] h-[calc(100%-4px)] shadow-[0_1px_2px_rgba(0,0,0,0.1),0_0_0_1px_color-mix(in_srgb,var(--text-primary)_10%,transparent)]'
         }`}
         style={{
           left: pill.left,
@@ -58,7 +75,7 @@ export function ModeSelector({ mode, onChange, size = 'sm' }: Props) {
           key={m.id}
           ref={el => { btnRefs.current[i] = el }}
           onClick={() => onChange(m.id)}
-          className={`relative z-[1] flex items-center rounded-lg font-medium transition-all duration-200 cursor-pointer select-none ${
+          className={`relative z-[1] flex items-center rounded-lg font-medium transition-colors duration-200 cursor-pointer select-none ${
             isMd ? 'gap-1.5 px-3.5 py-1.5 text-[13px]' : 'gap-1 px-2.5 py-1 text-[11px]'
           } ${
             mode === m.id

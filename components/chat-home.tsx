@@ -115,7 +115,7 @@ export function ChatHome({ onSend, onSelectFolder, onCloneRepo }: Props) {
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 overflow-y-auto">
-      <div className="w-full max-w-[560px] py-8">
+      <div className="w-full max-w-[680px] py-8">
         {/* Logo + Heading */}
         <div className="flex flex-col items-center mb-6">
           <div className="mb-3 text-[var(--text-tertiary)]">
@@ -156,52 +156,52 @@ export function ChatHome({ onSend, onSelectFolder, onCloneRepo }: Props) {
             onBlur={() => setIsFocused(false)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit() } }}
             placeholder={repoShort ? `Ask anything about ${repoShort}…` : 'Ask or type /command…'}
-            rows={2}
+            rows={3}
             className="w-full resize-none bg-transparent px-4 pt-4 pb-1 text-[14px] leading-[1.6] text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] outline-none"
           />
 
-          {/* Toolbar row — perfectly aligned */}
-          <div className="flex items-center justify-between px-3 pb-3 pt-1">
-            <div className="flex items-center gap-1.5">
-              <button className="p-1.5 rounded-lg text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] hover:bg-[color-mix(in_srgb,var(--text-primary)_5%,transparent)] transition-colors cursor-pointer" title="Attach file">
-                <Icon icon="lucide:paperclip" width={15} height={15} />
+          {/* Toolbar row */}
+          <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
+            <div className="flex items-center gap-0.5">
+              <button className="p-1.5 rounded-md text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] hover:bg-[color-mix(in_srgb,var(--text-primary)_5%,transparent)] transition-colors cursor-pointer" title="Attach file">
+                <Icon icon="lucide:paperclip" width={14} height={14} />
               </button>
-              <button className="p-1.5 rounded-lg text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] hover:bg-[color-mix(in_srgb,var(--text-primary)_5%,transparent)] transition-colors cursor-pointer" title="Attach image">
-                <Icon icon="lucide:image-plus" width={15} height={15} />
+              <button className="p-1.5 rounded-md text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] hover:bg-[color-mix(in_srgb,var(--text-primary)_5%,transparent)] transition-colors cursor-pointer" title="Attach image">
+                <Icon icon="lucide:image-plus" width={14} height={14} />
               </button>
-              <button className="p-1.5 rounded-lg text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] hover:bg-[color-mix(in_srgb,var(--text-primary)_5%,transparent)] transition-colors cursor-pointer" title="@ mention file">
-                <Icon icon="lucide:at-sign" width={15} height={15} />
+              <button className="p-1.5 rounded-md text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] hover:bg-[color-mix(in_srgb,var(--text-primary)_5%,transparent)] transition-colors cursor-pointer" title="@ mention file">
+                <Icon icon="lucide:at-sign" width={14} height={14} />
               </button>
             </div>
 
-            <div className="flex items-center gap-2">
-              <RuntimeSelector size="md" />
-              <PermissionsToggle size="md" />
-              <ModeSelector mode={agentMode} onChange={setAgentMode} size="md" />
+            <div className="flex items-center gap-1.5">
+              <RuntimeSelector size="sm" />
+              <PermissionsToggle size="sm" />
+              <ModeSelector mode={agentMode} onChange={setAgentMode} size="sm" />
               <button
                 onClick={handleSubmit}
                 disabled={!input.trim()}
-                className={`p-2 rounded-xl transition-all cursor-pointer ${
+                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
                   input.trim()
                     ? 'bg-[var(--text-primary)] text-[var(--bg)] shadow-sm hover:opacity-90 active:scale-95'
                     : 'bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] text-[var(--text-disabled)] cursor-not-allowed'
                 }`}
               >
-                <Icon icon="lucide:arrow-up" width={16} height={16} />
+                <Icon icon="lucide:arrow-up" width={14} height={14} />
               </button>
             </div>
           </div>
         </div>
 
         {/* Quick action chips */}
-        <div className="flex flex-wrap items-center justify-center gap-1.5 mt-4">
+        <div className="flex flex-wrap items-center justify-center gap-1 mt-3">
           {SUGGESTIONS.map((a, i) => (
             <button
               key={a.label}
               onClick={() => { setInput(a.prefix); inputRef.current?.focus() }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] hover:bg-[color-mix(in_srgb,var(--text-primary)_5%,transparent)] transition-all cursor-pointer animate-pill-float animate-pill-float-${i + 1}`}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] hover:bg-[color-mix(in_srgb,var(--text-primary)_5%,transparent)] transition-all cursor-pointer animate-pill-float animate-pill-float-${i + 1}`}
             >
-              <Icon icon={a.icon} width={13} height={13} />
+              <Icon icon={a.icon} width={12} height={12} />
               {a.label}
             </button>
           ))}

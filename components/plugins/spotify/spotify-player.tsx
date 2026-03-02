@@ -78,6 +78,26 @@ interface SearchResult {
   imageUrl?: string
 }
 
+interface PlaylistItem {
+  id: string
+  uri: string
+  name: string
+  description: string
+  imageUrl?: string
+  trackCount: number
+  ownerName: string
+}
+
+interface PlaylistTrack {
+  id: string
+  uri: string
+  name: string
+  artists: string
+  albumName: string
+  imageUrl?: string
+  durationMs: number
+}
+
 const SDK_URL = 'https://sdk.scdn.co/spotify-player.js'
 
 function formatMs(ms: number): string {
@@ -95,6 +115,13 @@ export function SpotifyPlayer() {
   const [searching, setSearching] = useState(false)
   const [loggingIn, setLoggingIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState(false)
+  const [showLibrary, setShowLibrary] = useState(false)
+  const [playlists, setPlaylists] = useState<PlaylistItem[]>([])
+  const [loadingPlaylists, setLoadingPlaylists] = useState(false)
+  const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistItem | null>(null)
+  const [playlistTracks, setPlaylistTracks] = useState<PlaylistTrack[]>([])
+  const [loadingTracks, setLoadingTracks] = useState(false)
 
   // SDK state
   const [sdkReady, setSdkReady] = useState(false)
@@ -298,6 +325,74 @@ export function SpotifyPlayer() {
     searchTimeout.current = setTimeout(() => doSearch(v), 350)
   }, [doSearch])
 
+  const fetchPlaylists = useCallback(async () => {
+    setLoadingPlaylists(true)
+    try {
+      const res = await spotifyFetch('/me/playlists?limit=50')
+      if (!res.ok) return
+      const data = await res.json()
+      const items: PlaylistItem[] = (data.items ?? []).map((p: { id: string; uri: string; name: string; description: string; images: { url: string }[]; tracks: { total: number }; owner: { display_name: string } }) => ({
+        id: p.id,
+        uri: p.uri,
+        name: p.name,
+        description: p.description ?? '',
+        imageUrl: p.images?.[0]?.url,
+        trackCount: p.tracks?.total ?? 0,
+        ownerName: p.owner?.display_name ?? 'Unknown',
+      }))
+      setPlaylists(items)
+    } catch {} finally {
+      setLoadingPlaylists(false)
+    }
+  }, [])
+
+  const fetchPlaylistTracks = useCallback(async (playlist: PlaylistItem) => {
+    setSelectedPlaylist(playlist)
+    setLoadingTracks(true)
+    setPlaylistTracks([])
+    try {
+      const res = await spotifyFetch(`/playlists/${playlist.id}/tracks?limit=50&fields=items(track(id,uri,name,artists(name),album(name,images),duration_ms))`)
+      if (!res.ok) return
+      const data = await res.json()
+      const tracks: PlaylistTrack[] = (data.items ?? [])
+        .filter((item: { track: { id: string } | null }) => item.track?.id)
+        .map((item: { track: { id: string; uri: string; name: string; artists: { name: string }[]; album: { name: string; images: { url: string }[] }; duration_ms: number } }) => ({
+          id: item.track.id,
+          uri: item.track.uri,
+          name: item.track.name,
+          artists: item.track.artists?.map(a => a.name).join(', ') ?? '',
+          albumName: item.track.album?.name ?? '',
+          imageUrl: item.track.album?.images?.[2]?.url ?? item.track.album?.images?.[0]?.url,
+          durationMs: item.track.duration_ms,
+        }))
+      setPlaylistTracks(tracks)
+    } catch {} finally {
+      setLoadingTracks(false)
+    }
+  }, [])
+
+  const openLibrary = useCallback(() => {
+    setShowLibrary(true)
+    setShowSearch(false)
+    setSelectedPlaylist(null)
+    setPlaylistTracks([])
+    if (playlists.length === 0) fetchPlaylists()
+  }, [playlists.length, fetchPlaylists])
+
+  const playPlaylistTrack = useCallback(async (track: PlaylistTrack, contextUri?: string, offset?: number) => {
+    if (!deviceId) return
+    try {
+      const body = contextUri
+        ? { context_uri: contextUri, offset: { position: offset ?? 0 } }
+        : { uris: [track.uri] }
+      await spotifyFetch(`/me/player/play?device_id=${deviceId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+    } catch {}
+  }, [deviceId])
+
   const playItem = useCallback(async (r: SearchResult) => {
     if (!deviceId) return
     try {
@@ -382,22 +477,40 @@ export function SpotifyPlayer() {
   }
 
   return (
-    <div className="fixed bottom-8 right-4 z-40 w-[300px] rounded-2xl bg-[var(--bg-tertiary)]/95 backdrop-blur-xl border border-[var(--border-hover)] shadow-2xl overflow-hidden transition-all duration-300 animate-in fade-in slide-in-from-bottom-2">
+    <div className={`fixed z-40 rounded-2xl bg-[var(--bg-tertiary)]/95 backdrop-blur-xl border border-[var(--border-hover)] shadow-2xl overflow-hidden transition-all duration-300 animate-in fade-in slide-in-from-bottom-2 ${
+      expanded
+        ? 'bottom-6 right-6 w-[420px]'
+        : 'bottom-8 right-4 w-[300px]'
+    }`}>
       {/* Header */}
-      <div className="flex items-center justify-between h-8 px-2.5 border-b border-[var(--border-hover)]/50">
+      <div className={`flex items-center justify-between px-2.5 border-b border-[var(--border-hover)]/50 ${expanded ? 'h-9' : 'h-8'}`}>
         <div className="flex items-center gap-1.5">
           <Icon icon="simple-icons:spotify" width={12} height={12} className="text-[#1DB954]" />
-          <span className="text-[10px] font-medium text-[var(--text-secondary)]">
+          <span className={`font-medium text-[var(--text-secondary)] ${expanded ? 'text-[11px]' : 'text-[10px]'}`}>
             {deviceId ? 'Knot Code' : 'Connecting...'}
           </span>
         </div>
         <div className="flex items-center gap-0.5">
           <button
-            onClick={() => { setShowSearch(v => !v); setTimeout(() => inputRef.current?.focus(), 100) }}
-            className="p-1 rounded hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] cursor-pointer transition-colors"
+            onClick={() => { setShowSearch(v => !v); setShowLibrary(false); setTimeout(() => inputRef.current?.focus(), 100) }}
+            className={`p-1 rounded hover:bg-[var(--bg-subtle)] cursor-pointer transition-colors ${showSearch ? 'text-[#1DB954]' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)]'}`}
             title="Search"
           >
             <Icon icon="lucide:search" width={11} height={11} />
+          </button>
+          <button
+            onClick={openLibrary}
+            className={`p-1 rounded hover:bg-[var(--bg-subtle)] cursor-pointer transition-colors ${showLibrary ? 'text-[#1DB954]' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)]'}`}
+            title="My Playlists"
+          >
+            <Icon icon="lucide:library" width={11} height={11} />
+          </button>
+          <button
+            onClick={() => setExpanded(v => !v)}
+            className="p-1 rounded hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] cursor-pointer transition-colors"
+            title={expanded ? 'Compact' : 'Expand'}
+          >
+            <Icon icon={expanded ? 'lucide:minimize-2' : 'lucide:maximize-2'} width={11} height={11} />
           </button>
           <button onClick={handleLogout} className="p-1 rounded hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] cursor-pointer transition-colors" title="Disconnect">
             <Icon icon="lucide:log-out" width={11} height={11} />
@@ -431,7 +544,7 @@ export function SpotifyPlayer() {
             )}
           </div>
           {(results.length > 0 || searching) && (
-            <div className="max-h-[200px] overflow-y-auto border-t border-[var(--border-hover)]/50">
+            <div className={`overflow-y-auto border-t border-[var(--border-hover)]/50 ${expanded ? 'max-h-[320px]' : 'max-h-[200px]'}`}>
               {searching ? (
                 <div className="flex items-center gap-2 px-3 py-3">
                   <Icon icon="lucide:loader-2" width={12} height={12} className="text-[var(--text-disabled)] animate-spin" />
@@ -462,6 +575,99 @@ export function SpotifyPlayer() {
         </div>
       )}
 
+      {/* Library / Playlists */}
+      {showLibrary && (
+        <div className="border-b border-[var(--border-hover)]/50">
+          {selectedPlaylist ? (
+            <>
+              <button
+                onClick={() => { setSelectedPlaylist(null); setPlaylistTracks([]) }}
+                className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer border-b border-[var(--border-hover)]/30"
+              >
+                <Icon icon="lucide:chevron-left" width={11} height={11} className="text-[var(--text-disabled)] shrink-0" />
+                <span className="text-[10px] font-medium text-[var(--text-secondary)] truncate">{selectedPlaylist.name}</span>
+                <span className="text-[8px] text-[var(--text-disabled)] ml-auto shrink-0">{selectedPlaylist.trackCount} tracks</span>
+              </button>
+              <div className={`overflow-y-auto ${expanded ? 'max-h-[400px]' : 'max-h-[260px]'}`}>
+                {loadingTracks ? (
+                  <div className="flex items-center gap-2 px-3 py-3">
+                    <Icon icon="lucide:loader-2" width={12} height={12} className="text-[var(--text-disabled)] animate-spin" />
+                    <span className="text-[10px] text-[var(--text-disabled)]">Loading tracks...</span>
+                  </div>
+                ) : playlistTracks.length === 0 ? (
+                  <div className="px-3 py-3">
+                    <span className="text-[10px] text-[var(--text-disabled)]">No tracks found</span>
+                  </div>
+                ) : playlistTracks.map((t, idx) => (
+                  <button
+                    key={t.id}
+                    onClick={() => playPlaylistTrack(t, selectedPlaylist.uri, idx)}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer text-left group"
+                  >
+                    {t.imageUrl ? (
+                      <img src={t.imageUrl} alt="" className="w-7 h-7 rounded object-cover shrink-0" />
+                    ) : (
+                      <div className="w-7 h-7 rounded bg-[var(--bg-subtle)] flex items-center justify-center shrink-0">
+                        <Icon icon="lucide:music" width={12} height={12} className="text-[var(--text-disabled)]" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[10px] font-medium text-[var(--text-primary)] truncate">{t.name}</div>
+                      <div className="text-[9px] text-[var(--text-tertiary)] truncate">{t.artists}</div>
+                    </div>
+                    <span className="text-[8px] font-mono text-[var(--text-disabled)] shrink-0">{formatMs(t.durationMs)}</span>
+                    <Icon icon="lucide:play" width={10} height={10} className="text-[var(--text-disabled)] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-[var(--border-hover)]/30">
+                <span className="text-[10px] font-medium text-[var(--text-secondary)]">My Playlists</span>
+                <button
+                  onClick={() => { setShowLibrary(false) }}
+                  className="p-0.5 rounded hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] cursor-pointer"
+                >
+                  <Icon icon="lucide:x" width={10} height={10} />
+                </button>
+              </div>
+              <div className={`overflow-y-auto ${expanded ? 'max-h-[400px]' : 'max-h-[260px]'}`}>
+                {loadingPlaylists ? (
+                  <div className="flex items-center gap-2 px-3 py-3">
+                    <Icon icon="lucide:loader-2" width={12} height={12} className="text-[var(--text-disabled)] animate-spin" />
+                    <span className="text-[10px] text-[var(--text-disabled)]">Loading playlists...</span>
+                  </div>
+                ) : playlists.length === 0 ? (
+                  <div className="px-3 py-3">
+                    <span className="text-[10px] text-[var(--text-disabled)]">No playlists found</span>
+                  </div>
+                ) : playlists.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => fetchPlaylistTracks(p)}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer text-left"
+                  >
+                    {p.imageUrl ? (
+                      <img src={p.imageUrl} alt="" className="w-8 h-8 rounded object-cover shrink-0" />
+                    ) : (
+                      <div className="w-8 h-8 rounded bg-[var(--bg-subtle)] flex items-center justify-center shrink-0">
+                        <Icon icon="lucide:list-music" width={14} height={14} className="text-[var(--text-disabled)]" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[10px] font-medium text-[var(--text-primary)] truncate">{p.name}</div>
+                      <div className="text-[9px] text-[var(--text-tertiary)] truncate">{p.ownerName} · {p.trackCount} tracks</div>
+                    </div>
+                    <Icon icon="lucide:chevron-right" width={11} height={11} className="text-[var(--text-disabled)] shrink-0" />
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Error */}
       {error && (
         <div className="px-2.5 py-1.5 bg-[color-mix(in_srgb,var(--error)_8%,transparent)] border-b border-[var(--border-hover)]/50">
@@ -471,91 +677,161 @@ export function SpotifyPlayer() {
 
       {/* Now playing */}
       {track ? (
-        <div className="p-2.5">
-          <div className="flex items-center gap-2.5 mb-2">
-            {/* Album art */}
-            <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 shadow-md">
-              {track.album.images[0] ? (
-                <img src={track.album.images[0].url} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full bg-[var(--bg-subtle)] flex items-center justify-center">
-                  <Icon icon="lucide:music" width={18} height={18} className="text-[var(--text-disabled)]" />
-                </div>
-              )}
-            </div>
-            {/* Track info */}
-            <div className="flex-1 min-w-0">
-              <div className="text-[11px] font-semibold text-[var(--text-primary)] truncate leading-tight">{track.name}</div>
-              <div className="text-[10px] text-[var(--text-tertiary)] truncate leading-tight mt-0.5">{track.artists.map(a => a.name).join(', ')}</div>
-              <div className="text-[9px] text-[var(--text-disabled)] truncate leading-tight mt-0.5">{track.album.name}</div>
-            </div>
-          </div>
-
-          {/* Progress bar */}
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-[8px] font-mono text-[var(--text-disabled)] w-7 text-right">{formatMs(localPosition)}</span>
-            <div
-              className="flex-1 h-1 rounded-full bg-[var(--border-hover)] cursor-pointer group relative"
-              onClick={seekTo}
-            >
-              <div
-                className="h-full rounded-full bg-[#1DB954] transition-[width] duration-200 ease-linear relative"
-                style={{ width: `${progressPct}%` }}
-              >
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[var(--text-primary)] shadow-md opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-            </div>
-            <span className="text-[8px] font-mono text-[var(--text-disabled)] w-7">{formatMs(duration)}</span>
-          </div>
-
-          {/* Controls */}
-          <div className="flex items-center justify-center gap-1">
-            <button
-              onClick={() => {
-                const next = playerState ? [0, 2, 1][playerState.repeat_mode] : 0
-                spotifyFetch(`/me/player/repeat?state=${['off', 'context', 'track'][next]}&device_id=${deviceId}`, { method: 'PUT' }).catch(() => {})
-              }}
-              className={`p-1.5 rounded-full transition-colors cursor-pointer ${
-                (playerState?.repeat_mode ?? 0) > 0 ? 'text-[#1DB954]' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)]'
-              }`}
-              title="Repeat"
-            >
-              <Icon icon={playerState?.repeat_mode === 2 ? 'lucide:repeat-1' : 'lucide:repeat'} width={12} height={12} />
-            </button>
-            <button onClick={skipPrev} className="p-1.5 rounded-full text-[var(--text-tertiary)] hover:text-[var(--text-primary)] cursor-pointer transition-colors">
-              <Icon icon="lucide:skip-back" width={14} height={14} />
-            </button>
-            <button onClick={togglePlay} className="p-2 rounded-full bg-[var(--text-primary)] text-[var(--bg)] hover:scale-105 cursor-pointer transition-transform shadow-md">
-              <Icon icon={paused ? 'lucide:play' : 'lucide:pause'} width={16} height={16} />
-            </button>
-            <button onClick={skipNext} className="p-1.5 rounded-full text-[var(--text-tertiary)] hover:text-[var(--text-primary)] cursor-pointer transition-colors">
-              <Icon icon="lucide:skip-forward" width={14} height={14} />
-            </button>
-            <button
-              onClick={() => {
-                spotifyFetch(`/me/player/shuffle?state=${!(playerState?.shuffle ?? false)}&device_id=${deviceId}`, { method: 'PUT' }).catch(() => {})
-              }}
-              className={`p-1.5 rounded-full transition-colors cursor-pointer ${
-                playerState?.shuffle ? 'text-[#1DB954]' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)]'
-              }`}
-              title="Shuffle"
-            >
-              <Icon icon="lucide:shuffle" width={12} height={12} />
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-col items-center py-6 px-4 text-center">
-          {!deviceId ? (
+        <div className={expanded ? 'p-4' : 'p-2.5'}>
+          {expanded ? (
             <>
-              <Icon icon="lucide:loader-2" width={20} height={20} className="text-[var(--text-disabled)] animate-spin mb-2" />
-              <p className="text-[10px] text-[var(--text-disabled)]">Connecting to Spotify...</p>
+              <div className="flex flex-col items-center mb-3">
+                <div className="w-44 h-44 rounded-xl overflow-hidden shrink-0 shadow-lg mb-3">
+                  {track.album.images[0] ? (
+                    <img src={track.album.images[0].url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-[var(--bg-subtle)] flex items-center justify-center">
+                      <Icon icon="lucide:music" width={40} height={40} className="text-[var(--text-disabled)]" />
+                    </div>
+                  )}
+                </div>
+                <div className="w-full text-center">
+                  <div className="text-sm font-semibold text-[var(--text-primary)] truncate leading-tight">{track.name}</div>
+                  <div className="text-xs text-[var(--text-tertiary)] truncate leading-tight mt-1">{track.artists.map(a => a.name).join(', ')}</div>
+                  <div className="text-[10px] text-[var(--text-disabled)] truncate leading-tight mt-0.5">{track.album.name}</div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 mb-3">
+                <span className="text-[9px] font-mono text-[var(--text-disabled)] w-8 text-right">{formatMs(localPosition)}</span>
+                <div
+                  className="flex-1 h-1.5 rounded-full bg-[var(--border-hover)] cursor-pointer group relative"
+                  onClick={seekTo}
+                >
+                  <div
+                    className="h-full rounded-full bg-[#1DB954] transition-[width] duration-200 ease-linear relative"
+                    style={{ width: `${progressPct}%` }}
+                  >
+                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[var(--text-primary)] shadow-md opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </div>
+                <span className="text-[9px] font-mono text-[var(--text-disabled)] w-8">{formatMs(duration)}</span>
+              </div>
+
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  onClick={() => {
+                    const next = playerState ? [0, 2, 1][playerState.repeat_mode] : 0
+                    spotifyFetch(`/me/player/repeat?state=${['off', 'context', 'track'][next]}&device_id=${deviceId}`, { method: 'PUT' }).catch(() => {})
+                  }}
+                  className={`p-2 rounded-full transition-colors cursor-pointer ${
+                    (playerState?.repeat_mode ?? 0) > 0 ? 'text-[#1DB954]' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)]'
+                  }`}
+                  title="Repeat"
+                >
+                  <Icon icon={playerState?.repeat_mode === 2 ? 'lucide:repeat-1' : 'lucide:repeat'} width={16} height={16} />
+                </button>
+                <button onClick={skipPrev} className="p-2 rounded-full text-[var(--text-tertiary)] hover:text-[var(--text-primary)] cursor-pointer transition-colors">
+                  <Icon icon="lucide:skip-back" width={18} height={18} />
+                </button>
+                <button onClick={togglePlay} className="p-3 rounded-full bg-[var(--text-primary)] text-[var(--bg)] hover:scale-105 cursor-pointer transition-transform shadow-lg">
+                  <Icon icon={paused ? 'lucide:play' : 'lucide:pause'} width={22} height={22} />
+                </button>
+                <button onClick={skipNext} className="p-2 rounded-full text-[var(--text-tertiary)] hover:text-[var(--text-primary)] cursor-pointer transition-colors">
+                  <Icon icon="lucide:skip-forward" width={18} height={18} />
+                </button>
+                <button
+                  onClick={() => {
+                    spotifyFetch(`/me/player/shuffle?state=${!(playerState?.shuffle ?? false)}&device_id=${deviceId}`, { method: 'PUT' }).catch(() => {})
+                  }}
+                  className={`p-2 rounded-full transition-colors cursor-pointer ${
+                    playerState?.shuffle ? 'text-[#1DB954]' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)]'
+                  }`}
+                  title="Shuffle"
+                >
+                  <Icon icon="lucide:shuffle" width={16} height={16} />
+                </button>
+              </div>
             </>
           ) : (
             <>
-              <Icon icon="lucide:music" width={20} height={20} className="text-[var(--text-disabled)] mb-2" />
-              <p className="text-[10px] text-[var(--text-tertiary)]">Nothing playing</p>
-              <p className="text-[9px] text-[var(--text-disabled)] mt-1">Search for a song or start playing from Spotify</p>
+              <div className="flex items-center gap-2.5 mb-2">
+                <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 shadow-md">
+                  {track.album.images[0] ? (
+                    <img src={track.album.images[0].url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-[var(--bg-subtle)] flex items-center justify-center">
+                      <Icon icon="lucide:music" width={18} height={18} className="text-[var(--text-disabled)]" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] font-semibold text-[var(--text-primary)] truncate leading-tight">{track.name}</div>
+                  <div className="text-[10px] text-[var(--text-tertiary)] truncate leading-tight mt-0.5">{track.artists.map(a => a.name).join(', ')}</div>
+                  <div className="text-[9px] text-[var(--text-disabled)] truncate leading-tight mt-0.5">{track.album.name}</div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[8px] font-mono text-[var(--text-disabled)] w-7 text-right">{formatMs(localPosition)}</span>
+                <div
+                  className="flex-1 h-1 rounded-full bg-[var(--border-hover)] cursor-pointer group relative"
+                  onClick={seekTo}
+                >
+                  <div
+                    className="h-full rounded-full bg-[#1DB954] transition-[width] duration-200 ease-linear relative"
+                    style={{ width: `${progressPct}%` }}
+                  >
+                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[var(--text-primary)] shadow-md opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </div>
+                <span className="text-[8px] font-mono text-[var(--text-disabled)] w-7">{formatMs(duration)}</span>
+              </div>
+
+              <div className="flex items-center justify-center gap-1">
+                <button
+                  onClick={() => {
+                    const next = playerState ? [0, 2, 1][playerState.repeat_mode] : 0
+                    spotifyFetch(`/me/player/repeat?state=${['off', 'context', 'track'][next]}&device_id=${deviceId}`, { method: 'PUT' }).catch(() => {})
+                  }}
+                  className={`p-1.5 rounded-full transition-colors cursor-pointer ${
+                    (playerState?.repeat_mode ?? 0) > 0 ? 'text-[#1DB954]' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)]'
+                  }`}
+                  title="Repeat"
+                >
+                  <Icon icon={playerState?.repeat_mode === 2 ? 'lucide:repeat-1' : 'lucide:repeat'} width={12} height={12} />
+                </button>
+                <button onClick={skipPrev} className="p-1.5 rounded-full text-[var(--text-tertiary)] hover:text-[var(--text-primary)] cursor-pointer transition-colors">
+                  <Icon icon="lucide:skip-back" width={14} height={14} />
+                </button>
+                <button onClick={togglePlay} className="p-2 rounded-full bg-[var(--text-primary)] text-[var(--bg)] hover:scale-105 cursor-pointer transition-transform shadow-md">
+                  <Icon icon={paused ? 'lucide:play' : 'lucide:pause'} width={16} height={16} />
+                </button>
+                <button onClick={skipNext} className="p-1.5 rounded-full text-[var(--text-tertiary)] hover:text-[var(--text-primary)] cursor-pointer transition-colors">
+                  <Icon icon="lucide:skip-forward" width={14} height={14} />
+                </button>
+                <button
+                  onClick={() => {
+                    spotifyFetch(`/me/player/shuffle?state=${!(playerState?.shuffle ?? false)}&device_id=${deviceId}`, { method: 'PUT' }).catch(() => {})
+                  }}
+                  className={`p-1.5 rounded-full transition-colors cursor-pointer ${
+                    playerState?.shuffle ? 'text-[#1DB954]' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)]'
+                  }`}
+                  title="Shuffle"
+                >
+                  <Icon icon="lucide:shuffle" width={12} height={12} />
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className={`flex flex-col items-center text-center ${expanded ? 'py-10 px-6' : 'py-6 px-4'}`}>
+          {!deviceId ? (
+            <>
+              <Icon icon="lucide:loader-2" width={expanded ? 28 : 20} height={expanded ? 28 : 20} className="text-[var(--text-disabled)] animate-spin mb-2" />
+              <p className={`text-[var(--text-disabled)] ${expanded ? 'text-[11px]' : 'text-[10px]'}`}>Connecting to Spotify...</p>
+            </>
+          ) : (
+            <>
+              <Icon icon="lucide:music" width={expanded ? 28 : 20} height={expanded ? 28 : 20} className="text-[var(--text-disabled)] mb-2" />
+              <p className={`text-[var(--text-tertiary)] ${expanded ? 'text-[11px]' : 'text-[10px]'}`}>Nothing playing</p>
+              <p className={`text-[var(--text-disabled)] mt-1 ${expanded ? 'text-[10px]' : 'text-[9px]'}`}>Search for a song or start playing from Spotify</p>
             </>
           )}
         </div>
