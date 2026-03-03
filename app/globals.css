@@ -1424,6 +1424,16 @@ p { line-height: 1.6; }
   animation: fade-in 0.3s ease both;
 }
 
+@keyframes fade-out {
+  0% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.animate-fade-out {
+  animation: fade-out 3s ease-out both;
+}
+
 .animate-scale-in {
   animation: scale-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
 }

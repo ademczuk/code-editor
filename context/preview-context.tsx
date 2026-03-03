@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo, useRef, type ReactNode } from 'react'
 
 export type DeviceFrame = 'responsive' | 'iphone-15' | 'pixel-8' | 'ipad-air' | 'macbook-14' | 'desktop-1080'
 
@@ -40,6 +40,11 @@ export interface IsolatedComponent {
   code?: string
 }
 
+export const ZOOM_MIN = 0.1
+export const ZOOM_MAX = 3
+export const ZOOM_STEP = 0.1
+export const ZOOM_PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3] as const
+
 interface PreviewContextValue {
   previewUrl: string
   setPreviewUrl: (url: string) => void
@@ -59,6 +64,16 @@ interface PreviewContextValue {
   exitIsolation: () => void
   refreshKey: number
   refresh: () => void
+  zoom: number
+  setZoom: (z: number | ((prev: number) => number)) => void
+  panX: number
+  panY: number
+  setPan: (x: number, y: number) => void
+  resetView: () => void
+  zoomIn: () => void
+  zoomOut: () => void
+  fitToScreen: () => void
+  setFitToScreenFn: (fn: (() => void) | null) => void
 }
 
 const PreviewContext = createContext<PreviewContextValue | null>(null)
@@ -72,6 +87,10 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
   const [annotations, setAnnotations] = useState<AgentAnnotation[]>([])
   const [isolatedComponent, setIsolatedComponent] = useState<IsolatedComponent | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [zoom, setZoomRaw] = useState(1)
+  const [panX, setPanX] = useState(0)
+  const [panY, setPanY] = useState(0)
+  const fitToScreenRef = useRef<(() => void) | null>(null)
 
   const addAnnotation = useCallback((a: Omit<AgentAnnotation, 'id' | 'timestamp'>) => {
     setAnnotations(prev => [...prev, { ...a, id: crypto.randomUUID(), timestamp: Date.now() }])
@@ -84,17 +103,59 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
   const exitIsolation = useCallback(() => setIsolatedComponent(null), [])
   const refresh = useCallback(() => setRefreshKey(k => k + 1), [])
 
+  const setZoom = useCallback((z: number | ((prev: number) => number)) => {
+    setZoomRaw(prev => {
+      const next = typeof z === 'function' ? z(prev) : z
+      return Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next)) * 100) / 100
+    })
+  }, [])
+
+  const setPan = useCallback((x: number, y: number) => {
+    setPanX(x)
+    setPanY(y)
+  }, [])
+
+  const resetView = useCallback(() => {
+    setZoomRaw(1)
+    setPanX(0)
+    setPanY(0)
+  }, [])
+
+  const zoomIn = useCallback(() => {
+    setZoom(prev => {
+      const next = ZOOM_PRESETS.find(p => p > prev + 0.01)
+      return next ?? Math.min(prev + ZOOM_STEP, ZOOM_MAX)
+    })
+  }, [setZoom])
+
+  const zoomOut = useCallback(() => {
+    setZoom(prev => {
+      const next = [...ZOOM_PRESETS].reverse().find(p => p < prev - 0.01)
+      return next ?? Math.max(prev - ZOOM_STEP, ZOOM_MIN)
+    })
+  }, [setZoom])
+
+  const fitToScreen = useCallback(() => {
+    fitToScreenRef.current?.()
+  }, [])
+
+  const setFitToScreenFn = useCallback((fn: (() => void) | null) => {
+    fitToScreenRef.current = fn
+  }, [])
+
   const value = useMemo<PreviewContextValue>(() => ({
     previewUrl, setPreviewUrl, visible, setVisible, pip, setPip,
     activeDevice, setActiveDevice, carouselMode, setCarouselMode,
     annotations, addAnnotation, clearAnnotations,
     isolatedComponent, isolateComponent, exitIsolation,
     refreshKey, refresh,
+    zoom, setZoom, panX, panY, setPan, resetView, zoomIn, zoomOut, fitToScreen, setFitToScreenFn,
   }), [
     previewUrl, visible, pip, activeDevice, carouselMode,
     annotations, addAnnotation, clearAnnotations,
     isolatedComponent, isolateComponent, exitIsolation,
     refreshKey, refresh,
+    zoom, setZoom, panX, panY, setPan, resetView, zoomIn, zoomOut, fitToScreen, setFitToScreenFn,
   ])
 
   return (

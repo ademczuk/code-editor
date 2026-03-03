@@ -51,7 +51,7 @@ const VIEW_ICONS: Record<string, { icon: string; label: string }> = {
   settings: { icon: 'lucide:settings', label: 'Settings' },
 }
 
-const VISIBLE_VIEWS: ViewId[] = ['editor', 'preview', 'workflows', 'grid', 'git', 'prs']
+const VISIBLE_VIEWS: ViewId[] = ['editor', 'preview', 'git', 'prs']
 
 const TERMINAL_SPRING = { type: 'spring' as const, stiffness: 500, damping: 35 }
 
@@ -135,7 +135,57 @@ function SidebarPluginSlot() {
     try { return localStorage.getItem('ce:sidebar-plugins-collapsed') === 'true' } catch { return false }
   })
   useEffect(() => { try { localStorage.setItem('ce:sidebar-plugins-collapsed', String(collapsed)) } catch {} }, [collapsed])
+
+  const sorted = useMemo(() => [...entries].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)), [entries])
+
+  // Per-widget height ratios (persisted). Each value is a fraction of available space.
+  const [ratios, setRatios] = useState<Record<string, number>>(() => {
+    try {
+      const raw = localStorage.getItem('ce:sidebar-plugin-ratios')
+      if (raw) return JSON.parse(raw)
+    } catch {}
+    return {}
+  })
+  useEffect(() => {
+    try { localStorage.setItem('ce:sidebar-plugin-ratios', JSON.stringify(ratios)) } catch {}
+  }, [ratios])
+
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const handleDividerDrag = useCallback((e: React.MouseEvent, topId: string, bottomId: string) => {
+    e.preventDefault()
+    const container = containerRef.current
+    if (!container) return
+    const startY = e.clientY
+    const containerRect = container.getBoundingClientRect()
+    const totalHeight = containerRect.height - 24 // subtract collapse button height
+
+    const currentRatios = { ...ratios }
+    const count = sorted.length
+    const defaultRatio = 1 / count
+    const topRatio = currentRatios[topId] ?? defaultRatio
+    const bottomRatio = currentRatios[bottomId] ?? defaultRatio
+
+    const onMove = (ev: MouseEvent) => {
+      const delta = ev.clientY - startY
+      const deltaRatio = delta / totalHeight
+      const newTop = Math.max(0.15, Math.min(topRatio + bottomRatio - 0.15, topRatio + deltaRatio))
+      const newBottom = topRatio + bottomRatio - newTop
+      setRatios(prev => ({ ...prev, [topId]: newTop, [bottomId]: newBottom }))
+    }
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [ratios, sorted])
+
   if (entries.length === 0) return null
+
+  const count = sorted.length
+  const defaultRatio = 1 / count
+
   return (
     <div
       className={`relative shrink-0 flex flex-col rounded-xl border border-[var(--border)] bg-[var(--bg)] overflow-hidden transition-[width] duration-200 ${collapsed ? 'w-[48px]' : ''}`}
@@ -143,7 +193,7 @@ function SidebarPluginSlot() {
     >
       {collapsed ? (
         <div className="flex flex-col items-center pt-3 gap-2">
-          {entries.map(e => {
+          {sorted.map(e => {
             const icon = e.id.includes('youtube') ? 'mdi:youtube' : 'simple-icons:spotify'
             const color = e.id.includes('youtube') ? '#FF0000' : '#1DB954'
             return (
@@ -155,14 +205,32 @@ function SidebarPluginSlot() {
         </div>
       ) : (
         <>
-          {entries.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(e => {
-            const C = e.component
-            return <C key={e.id} />
-          })}
+          <div ref={containerRef} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            {sorted.map((e, i) => {
+              const C = e.component
+              const ratio = ratios[e.id] ?? defaultRatio
+              return (
+                <div key={e.id} className="flex flex-col min-h-0" style={{ flex: `${ratio} 1 0%` }}>
+                  {i > 0 && (
+                    <div
+                      className="h-[5px] shrink-0 cursor-row-resize group/divider relative z-10"
+                      onMouseDown={ev => handleDividerDrag(ev, sorted[i - 1].id, e.id)}
+                    >
+                      <div className="absolute inset-x-0 -top-[2px] -bottom-[2px]" />
+                      <div className="absolute inset-x-2 top-1/2 -translate-y-1/2 h-[2px] rounded-full bg-[var(--text-disabled)] opacity-0 group-hover/divider:opacity-30 group-hover/divider:bg-[var(--brand)] transition-all" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    <C />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
           <button onClick={() => setCollapsed(true)} className="h-6 flex items-center justify-center text-[var(--text-disabled)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] cursor-pointer shrink-0" title="Collapse">
             <Icon icon="lucide:panel-right-close" width={12} height={12} />
           </button>
-          {/* Resize handle */}
+          {/* Width resize handle */}
           <div
             className="resize-handle absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-[var(--brand)] transition-all z-10 opacity-0 hover:opacity-60 hover:w-1.5"
             onMouseDown={pluginsResize.onResizeStart}

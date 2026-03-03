@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Icon } from '@iconify/react'
 import { useRepo } from '@/context/repo-context'
 import { useLocal } from '@/context/local-context'
-import { fetchBranchesByName, createBranch } from '@/lib/github-api'
+import { fetchBranchesByName, createBranch, authHeaders } from '@/lib/github-api'
 
 export function BranchPicker() {
   const { repo, setRepo } = useRepo()
@@ -83,7 +83,9 @@ export function BranchPicker() {
       await switchBranch(name)
     } else if (repo) {
       try {
-        const res = await fetch(`https://api.github.com/repos/${repo.fullName}/git/ref/heads/${repo.branch}`)
+        const res = await fetch(`https://api.github.com/repos/${repo.fullName}/git/ref/heads/${repo.branch}`, {
+          headers: authHeaders(),
+        })
         if (res.ok) {
           const data = await res.json() as { object: { sha: string } }
           await createBranch(repo.fullName, name, data.object.sha)

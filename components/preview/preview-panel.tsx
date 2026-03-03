@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Icon } from '@iconify/react'
-import { usePreview, DEVICES, type DeviceSpec } from '@/context/preview-context'
+import { usePreview, DEVICES, ZOOM_MIN, ZOOM_MAX, ZOOM_PRESETS, type DeviceSpec } from '@/context/preview-context'
 import { useEditor } from '@/context/editor-context'
 import { useView } from '@/context/view-context'
 import { useLocal } from '@/context/local-context'
@@ -86,6 +86,7 @@ export function PreviewPanel() {
     isolatedComponent, exitIsolation,
     annotations, clearAnnotations,
     refreshKey, refresh,
+    zoom, setZoom, panX, panY, setPan, resetView, zoomIn, zoomOut, fitToScreen, setFitToScreenFn,
   } = usePreview()
 
   const { activeFile, files } = useEditor()
@@ -97,7 +98,107 @@ export function PreviewPanel() {
   const [loading, setLoading] = useState(false)
   const [showScripts, setShowScripts] = useState(false)
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const singleViewRef = useRef<HTMLDivElement>(null)
+  const [isPanning, setIsPanning] = useState(false)
+  const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
   const device = DEVICES.find(d => d.id === activeDevice) ?? DEVICES[0]
+
+  const showZoomBar = !carouselMode && !isolatedComponent && device.id !== 'responsive'
+
+  // Single-device fit-to-screen
+  const fitSingleDevice = useCallback(() => {
+    const container = singleViewRef.current
+    if (!container || device.id === 'responsive') return
+    const cw = container.clientWidth - 64
+    const ch = container.clientHeight - 64
+    const dw = device.width * device.scale + 40
+    const dh = device.height * device.scale + 60
+    const fit = Math.min(cw / dw, ch / dh, 1)
+    const clamped = Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, fit)) * 100) / 100
+    setZoom(clamped)
+    setPan(0, 0)
+  }, [device, setZoom, setPan])
+
+  useEffect(() => {
+    if (!carouselMode && device.id !== 'responsive') {
+      setFitToScreenFn(fitSingleDevice)
+      return () => setFitToScreenFn(null)
+    }
+  }, [carouselMode, device.id, fitSingleDevice, setFitToScreenFn])
+
+  // Wheel zoom for single-device mode
+  const handleSingleWheel = useCallback((e: React.WheelEvent) => {
+    if (device.id === 'responsive') return
+    if (!e.ctrlKey && !e.metaKey) return
+    e.preventDefault()
+    e.stopPropagation()
+
+    const container = singleViewRef.current
+    if (!container) return
+
+    const rect = container.getBoundingClientRect()
+    const cursorX = e.clientX - rect.left - rect.width / 2
+    const cursorY = e.clientY - rect.top - rect.height / 2
+
+    const delta = -e.deltaY * 0.003
+    const oldZoom = zoom
+    const raw = oldZoom * (1 + delta)
+    const newZoom = Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, raw)) * 100) / 100
+    const ratio = newZoom / oldZoom
+
+    setPan(
+      cursorX - ratio * (cursorX - panX),
+      cursorY - ratio * (cursorY - panY),
+    )
+    setZoom(newZoom)
+  }, [device.id, zoom, panX, panY, setZoom, setPan])
+
+  const handleSinglePointerDown = useCallback((e: React.PointerEvent) => {
+    if (device.id === 'responsive') return
+    if (e.button === 1 || (e.button === 0 && e.altKey)) {
+      e.preventDefault()
+      setIsPanning(true)
+      panStartRef.current = { x: e.clientX, y: e.clientY, panX, panY }
+      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+    }
+  }, [device.id, panX, panY])
+
+  const handleSinglePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!isPanning) return
+    const dx = e.clientX - panStartRef.current.x
+    const dy = e.clientY - panStartRef.current.y
+    setPan(panStartRef.current.panX + dx, panStartRef.current.panY + dy)
+  }, [isPanning, setPan])
+
+  const handleSinglePointerUp = useCallback((e: React.PointerEvent) => {
+    if (isPanning) {
+      setIsPanning(false)
+      ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
+    }
+  }, [isPanning])
+
+  // Keyboard shortcuts for single-device zoom
+  useEffect(() => {
+    if (carouselMode || device.id === 'responsive') return
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) {
+        e.preventDefault()
+        zoomIn()
+      } else if ((e.metaKey || e.ctrlKey) && e.key === '-') {
+        e.preventDefault()
+        zoomOut()
+      } else if ((e.metaKey || e.ctrlKey) && e.key === '0') {
+        e.preventDefault()
+        resetView()
+      } else if ((e.metaKey || e.ctrlKey) && e.key === '1') {
+        e.preventDefault()
+        fitSingleDevice()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [carouselMode, device.id, zoomIn, zoomOut, resetView, fitSingleDevice])
 
   useEffect(() => { setUrlInput(previewUrl) }, [previewUrl])
 
@@ -118,6 +219,9 @@ export function PreviewPanel() {
   useEffect(() => { if (previewUrl) setLoading(true) }, [refreshKey, previewUrl])
 
   useEffect(() => { if (!visible) setVisible(true) }, [visible, setVisible])
+
+  // Reset zoom/pan when switching devices or modes
+  useEffect(() => { resetView() }, [activeDevice, carouselMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (pip) return <PipWindow />
 
@@ -315,30 +419,76 @@ export function PreviewPanel() {
           <DeviceCarousel />
         ) : (
           /* Single device preview */
-          <div className={`w-full h-full overflow-auto ${device.id === 'responsive' ? 'flex items-center justify-center' : 'flex items-center justify-center p-4'}`}>
-            {previewUrl ? (
-              <DeviceWrapper device={device}>
-                <iframe
-                  ref={iframeRef}
-                  key={refreshKey}
-                  src={previewUrl}
-                  onLoad={handleIframeLoad}
-                  onError={() => setLoading(false)}
-                  className="w-full h-full border-0 bg-white"
-                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-                  title="Preview"
+          device.id === 'responsive' ? (
+            <div className="w-full h-full flex items-center justify-center">
+              {previewUrl ? (
+                <DeviceWrapper device={device}>
+                  <iframe
+                    ref={iframeRef}
+                    key={refreshKey}
+                    src={previewUrl}
+                    onLoad={handleIframeLoad}
+                    onError={() => setLoading(false)}
+                    className="w-full h-full border-0 bg-white"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                    title="Preview"
+                  />
+                </DeviceWrapper>
+              ) : (
+                <EmptyPreviewState
+                  onSetUrl={() => setUrlEditing(true)}
+                  scripts={scripts}
+                  devScripts={devScripts}
+                  buildScripts={buildScripts}
+                  onRunScript={handleRunScript}
                 />
-              </DeviceWrapper>
-            ) : (
-              <EmptyPreviewState
-                onSetUrl={() => setUrlEditing(true)}
-                scripts={scripts}
-                devScripts={devScripts}
-                buildScripts={buildScripts}
-                onRunScript={handleRunScript}
-              />
-            )}
-          </div>
+              )}
+            </div>
+          ) : (
+            <div
+              ref={singleViewRef}
+              className="w-full h-full overflow-hidden relative"
+              style={{ cursor: isPanning ? 'grabbing' : 'default' }}
+              onWheel={handleSingleWheel}
+              onPointerDown={handleSinglePointerDown}
+              onPointerMove={handleSinglePointerMove}
+              onPointerUp={handleSinglePointerUp}
+              onPointerCancel={handleSinglePointerUp}
+            >
+              <div
+                className="absolute top-1/2 left-1/2"
+                style={{
+                  transform: `translate(-50%, -50%) translate(${panX}px, ${panY}px) scale(${zoom})`,
+                  transformOrigin: 'center center',
+                  transition: isPanning ? 'none' : 'transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                  willChange: 'transform',
+                }}
+              >
+                {previewUrl ? (
+                  <DeviceWrapper device={device}>
+                    <iframe
+                      ref={iframeRef}
+                      key={refreshKey}
+                      src={previewUrl}
+                      onLoad={handleIframeLoad}
+                      onError={() => setLoading(false)}
+                      className="w-full h-full border-0 bg-white"
+                      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                      title="Preview"
+                    />
+                  </DeviceWrapper>
+                ) : (
+                  <EmptyPreviewState
+                    onSetUrl={() => setUrlEditing(true)}
+                    scripts={scripts}
+                    devScripts={devScripts}
+                    buildScripts={buildScripts}
+                    onRunScript={handleRunScript}
+                  />
+                )}
+              </div>
+            </div>
+          )
         )}
 
         {/* Agent Annotations overlay */}
@@ -346,6 +496,16 @@ export function PreviewPanel() {
           <AgentAnnotationOverlay iframeRef={iframeRef} />
         )}
       </div>
+
+      {/* Bottom zoom bar for single-device mode */}
+      {showZoomBar && (
+        <SingleDeviceZoomBar
+          zoom={zoom}
+          setZoom={setZoom}
+          resetView={resetView}
+          fitToScreen={fitSingleDevice}
+        />
+      )}
     </div>
   )
 }
@@ -409,6 +569,132 @@ export function DeviceWrapper({ device, children, className = '' }: { device: De
   )
 }
 
+
+/* ── Single-Device Zoom Bar ──────────────────────────────────── */
+
+function SingleDeviceZoomBar({
+  zoom,
+  setZoom,
+  resetView,
+  fitToScreen,
+}: {
+  zoom: number
+  setZoom: (z: number) => void
+  resetView: () => void
+  fitToScreen: () => void
+}) {
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const zoomPercent = Math.round(zoom * 100)
+
+  return (
+    <div className="flex items-center justify-end h-7 px-3 border-t border-[var(--border)] bg-[var(--bg-elevated)] shrink-0">
+      <div className="flex items-center gap-1">
+        <button
+          onClick={fitToScreen}
+          className="p-0.5 rounded hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] cursor-pointer"
+          title="Fit to screen (⌘1)"
+        >
+          <Icon icon="lucide:scan" width={12} height={12} />
+        </button>
+
+        <button
+          onClick={() => {
+            const next = [...ZOOM_PRESETS].reverse().find(p => p < zoom - 0.01)
+            setZoom(next ?? Math.max(zoom - 0.1, ZOOM_MIN))
+          }}
+          className="p-0.5 rounded hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+          disabled={zoom <= ZOOM_MIN}
+          title="Zoom out (⌘−)"
+        >
+          <Icon icon="lucide:minus" width={12} height={12} />
+        </button>
+
+        <div className="relative w-20 h-4 flex items-center">
+          <div className="absolute inset-y-0 left-0 right-0 flex items-center">
+            <div className="w-full h-[3px] rounded-full bg-[var(--border)] relative">
+              <div
+                className="absolute h-full rounded-full bg-[var(--brand)] transition-all duration-100"
+                style={{ width: `${((zoom - ZOOM_MIN) / (ZOOM_MAX - ZOOM_MIN)) * 100}%` }}
+              />
+              <div
+                className="absolute top-[-2px] w-[1px] h-[7px] bg-[var(--text-disabled)] opacity-40"
+                style={{ left: `${((1 - ZOOM_MIN) / (ZOOM_MAX - ZOOM_MIN)) * 100}%` }}
+              />
+            </div>
+          </div>
+          <input
+            type="range"
+            min={ZOOM_MIN * 100}
+            max={ZOOM_MAX * 100}
+            step={1}
+            value={zoom * 100}
+            onChange={e => setZoom(Number(e.target.value) / 100)}
+            className="absolute inset-0 w-full opacity-0 cursor-pointer"
+          />
+        </div>
+
+        <button
+          onClick={() => {
+            const next = ZOOM_PRESETS.find(p => p > zoom + 0.01)
+            setZoom(next ?? Math.min(zoom + 0.1, ZOOM_MAX))
+          }}
+          className="p-0.5 rounded hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+          disabled={zoom >= ZOOM_MAX}
+          title="Zoom in (⌘+)"
+        >
+          <Icon icon="lucide:plus" width={12} height={12} />
+        </button>
+
+        <div className="relative">
+          <button
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono font-medium tabular-nums text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] cursor-pointer min-w-[44px] justify-center"
+          >
+            {zoomPercent}%
+            <Icon icon="lucide:chevron-down" width={8} height={8} className="text-[var(--text-disabled)]" />
+          </button>
+
+          {dropdownOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setDropdownOpen(false)} />
+              <div className="absolute bottom-full right-0 mb-1 z-50 w-36 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl overflow-hidden">
+                {ZOOM_PRESETS.map(p => (
+                  <button
+                    key={p}
+                    onClick={() => { setZoom(p); setDropdownOpen(false) }}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 text-[11px] transition-colors cursor-pointer ${
+                      Math.abs(zoom - p) < 0.01
+                        ? 'bg-[color-mix(in_srgb,var(--brand)_10%,transparent)] text-[var(--brand)] font-semibold'
+                        : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]'
+                    }`}
+                  >
+                    {Math.round(p * 100)}%
+                    {Math.abs(zoom - p) < 0.01 && <Icon icon="lucide:check" width={11} height={11} />}
+                  </button>
+                ))}
+                <div className="border-t border-[var(--border)]" />
+                <button
+                  onClick={() => { resetView(); setDropdownOpen(false) }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer"
+                >
+                  <Icon icon="lucide:rotate-ccw" width={10} height={10} />
+                  Reset (⌘0)
+                </button>
+                <button
+                  onClick={() => { fitToScreen(); setDropdownOpen(false) }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer"
+                >
+                  <Icon icon="lucide:scan" width={10} height={10} />
+                  Fit to screen (⌘1)
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 interface EmptyPreviewStateProps {
   onSetUrl: () => void
