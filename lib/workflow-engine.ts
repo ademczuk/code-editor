@@ -367,8 +367,8 @@ export class WorkflowExecutionEngine {
     const idemKey = `wf-cond-${Date.now()}-${node.id}`
 
     const prompt = condition
-      ? `Given:\n\`\`\`\n${inputStr.slice(0, 3000)}\n\`\`\`\nEvaluate: "${condition}"\nRespond ONLY "true" or "false".`
-      : `Given:\n\`\`\`\n${inputStr.slice(0, 3000)}\n\`\`\`\n${node.label}\nRespond ONLY "yes" or "no".`
+      ? `Given:\n\`\`\`\n${inputStr.slice(0, 3080)}\n\`\`\`\nEvaluate: "${condition}"\nRespond ONLY "true" or "false".`
+      : `Given:\n\`\`\`\n${inputStr.slice(0, 3080)}\n\`\`\`\n${node.label}\nRespond ONLY "yes" or "no".`
 
     return new Promise<NodeResult>((resolve, reject) => {
       let responseText = ''

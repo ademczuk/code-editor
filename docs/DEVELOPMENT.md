@@ -27,7 +27,7 @@ pnpm dev
 
 | Script | Purpose |
 |--------|---------|
-| `pnpm dev` | Next.js dev server (port 3000) |
+| `pnpm dev` | Next.js dev server (port 3080) |
 | `pnpm build` | Production build (Vercel) |
 | `pnpm build --webpack` | Production build with webpack bundler |
 | `pnpm tauri:dev` | Desktop dev (Next.js + native window) |

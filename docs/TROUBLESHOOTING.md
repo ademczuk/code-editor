@@ -116,9 +116,9 @@ sudo xcode-select --reset
 
 **Possible causes:**
 
-1. **Dev server not running:** `pnpm tauri:dev` should start Next.js dev server automatically. Check that port 3000 is free:
+1. **Dev server not running:** `pnpm tauri:dev` should start Next.js dev server automatically. Check that port 3080 is free:
    ```bash
-   lsof -i :3000
+   lsof -i :3080
    ```
 
 2. **CSP blocking:** Check the browser console (right-click → Inspect in the Tauri window). If CSP errors, check `src-tauri/tauri.conf.json` has `"csp": null`.
@@ -146,7 +146,7 @@ sudo xcode-select --reset
     "controlUi": {
       "allowedOrigins": [
         "http://localhost:3080",
-        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3080",
         "https://editor.openknot.ai"
       ]
     }

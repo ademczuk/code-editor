@@ -171,7 +171,7 @@ build_web() {
   if echo "$@" | grep -q "\-\-serve"; then
     log "Starting local production server…"
     echo -e "  ${CYAN}→${NC} http://localhost:3080\n"
-    npx serve out -l 3000
+    npx serve out -l 3080
   fi
 }
 

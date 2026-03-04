@@ -66,7 +66,7 @@ async function generateCodeChallenge(verifier: string): Promise<string> {
 function getRedirectUri(): string {
   const origin = window.location.origin
   if (isTauri() || origin.startsWith('tauri://')) {
-    return 'http://127.0.0.1:3000/'
+    return 'http://127.0.0.1:3080/'
   }
   if (origin.includes('localhost')) {
     return origin.replace('localhost', '127.0.0.1') + window.location.pathname
