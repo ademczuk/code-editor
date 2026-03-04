@@ -50,8 +50,9 @@
     "allow-local-git-clean-branches",
     "clipboard-manager:default",
     "clipboard-manager:allow-write-text",
-    "clipboard-manager:allow-write",
+    "clipboard-manager:allow-write-html",
+    "clipboard-manager:allow-write-image",
     "clipboard-manager:allow-read-text",
-    "clipboard-manager:allow-read"
+    "clipboard-manager:allow-read-image"
   ]
 }
