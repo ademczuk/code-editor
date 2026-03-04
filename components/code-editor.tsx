@@ -17,6 +17,8 @@ import { showInlineDiff } from '@/lib/inline-diff'
 import { InlineEdit } from '@/components/inline-edit'
 import { MarkdownPreview } from '@/components/markdown-preview'
 import { MarkdownModeToggle, type MarkdownViewMode } from '@/components/markdown-mode-toggle'
+import '@/lib/clipboard'
+import { writeText, readText } from '@tauri-apps/plugin-clipboard-manager'
 
 if (typeof self !== 'undefined' && !(self as any).MonacoEnvironment) {
   const noopDataUrl = 'data:text/javascript;charset=utf-8,' + encodeURIComponent('self.onmessage=function(){}');
@@ -430,6 +432,67 @@ export function CodeEditor() {
       setSelToolbar({ visible: true, top: rect.top + pos.top - 36, left: rect.left + pos.left, text: model.getValueInRange(sel), sl: sel.startLineNumber, el: sel.endLineNumber })
     })
     editor.focus()
+
+    // Override clipboard actions to use Tauri plugin instead of browser API
+    const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+    if (isTauri && monaco) {
+      editor.addAction({
+        id: 'tauri-clipboard-copy',
+        label: 'Copy',
+        keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC],
+        run: (ed) => {
+          const sel = ed.getSelection()
+          const model = ed.getModel()
+          if (!sel || !model) return
+          const text = sel.isEmpty()
+            ? model.getLineContent(sel.startLineNumber)
+            : model.getValueInRange(sel)
+          writeText(text).catch(() => {})
+        },
+      })
+      editor.addAction({
+        id: 'tauri-clipboard-cut',
+        label: 'Cut',
+        keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX],
+        run: (ed) => {
+          const sel = ed.getSelection()
+          const model = ed.getModel()
+          if (!sel || !model) return
+          const text = sel.isEmpty()
+            ? model.getLineContent(sel.startLineNumber)
+            : model.getValueInRange(sel)
+          writeText(text).catch(() => {})
+          if (sel.isEmpty()) {
+            ed.executeEdits('tauri-cut', [{
+              range: new monaco.Range(sel.startLineNumber, 1, sel.startLineNumber + 1, 1),
+              text: '',
+            }])
+          } else {
+            ed.executeEdits('tauri-cut', [{
+              range: sel,
+              text: '',
+            }])
+          }
+        },
+      })
+      editor.addAction({
+        id: 'tauri-clipboard-paste',
+        label: 'Paste',
+        keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV],
+        run: async (ed) => {
+          try {
+            const text = await readText()
+            if (!text) return
+            const sel = ed.getSelection()
+            if (!sel) return
+            ed.executeEdits('tauri-paste', [{
+              range: sel,
+              text,
+            }])
+          } catch { /* ignore */ }
+        },
+      })
+    }
 
     editor.onDidDispose(() => {
       if (editorRef.current === editor) {

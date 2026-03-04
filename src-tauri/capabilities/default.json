@@ -48,6 +48,10 @@
     "allow-local-git-save",
     "allow-local-git-sync",
     "allow-local-git-clean-branches",
-    "clipboard-manager:default"
+    "clipboard-manager:default",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-write",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-read"
   ]
 }
