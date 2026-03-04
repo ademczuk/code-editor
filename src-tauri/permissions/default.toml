@@ -124,3 +124,33 @@ commands.allow = ["local_git_has_upstream"]
 identifier = "allow-local-git-ahead-behind"
 description = "Allows checking commits ahead/behind remote"
 commands.allow = ["local_git_ahead_behind"]
+
+[[permission]]
+identifier = "allow-local-delete-path"
+description = "Allows deleting a file or directory"
+commands.allow = ["local_delete_path"]
+
+[[permission]]
+identifier = "allow-local-git-discard"
+description = "Allows discarding unstaged changes via git checkout"
+commands.allow = ["local_git_discard"]
+
+[[permission]]
+identifier = "allow-local-git-discard-staged"
+description = "Allows discarding staged changes via git reset + checkout"
+commands.allow = ["local_git_discard_staged"]
+
+[[permission]]
+identifier = "allow-local-git-save"
+description = "Allows git add all, commit, and push in one step"
+commands.allow = ["local_git_save"]
+
+[[permission]]
+identifier = "allow-local-git-sync"
+description = "Allows git pull --rebase then push"
+commands.allow = ["local_git_sync"]
+
+[[permission]]
+identifier = "allow-local-git-clean-branches"
+description = "Allows deleting merged local branches"
+commands.allow = ["local_git_clean_branches"]

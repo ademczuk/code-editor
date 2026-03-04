@@ -41,6 +41,12 @@
     "allow-local-git-push",
     "allow-local-git-log",
     "allow-local-git-has-upstream",
-    "allow-local-git-ahead-behind"
+    "allow-local-git-ahead-behind",
+    "allow-local-delete-path",
+    "allow-local-git-discard",
+    "allow-local-git-discard-staged",
+    "allow-local-git-save",
+    "allow-local-git-sync",
+    "allow-local-git-clean-branches"
   ]
 }

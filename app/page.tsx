@@ -669,6 +669,25 @@ export default function EditorLayout() {
 
           <div className="flex-1 tauri-drag-region" data-tauri-drag-region />
 
+          {/* Editor layout controls */}
+          <button
+            onClick={() => {
+              if (activeView !== 'editor') setView('editor')
+              layout.toggle('tree')
+            }}
+            className="tauri-no-drag p-2 rounded-lg hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] cursor-pointer transition-colors"
+            title="Files (⌘B)"
+          >
+            <Icon icon="lucide:folder" width={18} height={18} />
+          </button>
+          <button
+            onClick={() => layout.toggle('terminal')}
+            className="tauri-no-drag p-2 rounded-lg hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] cursor-pointer transition-colors"
+            title="Terminal (⌘J)"
+          >
+            <Icon icon="lucide:terminal" width={18} height={18} />
+          </button>
+
           {/* Settings */}
           <button onClick={() => setSettingsVisible(true)} className="tauri-no-drag p-2 rounded-lg hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] cursor-pointer transition-colors" title="Settings">
             <Icon icon="lucide:settings" width={19} height={19} className="animate-gear-sway" />
@@ -855,14 +874,12 @@ export default function EditorLayout() {
             // Layout toggles — direct via layout context
             case 'toggle-files': layout.toggle('tree'); break
             case 'toggle-terminal': layout.toggle('terminal'); break
-            case 'toggle-engine': layout.toggle('engine'); break
             case 'toggle-chat': layout.toggle('chat'); break
             case 'toggle-plugins': layout.toggle('plugins'); break
             case 'collapse-editor': layout.setEditorCollapsed(true); break
             // Layout presets
             case 'layout-focus': layout.preset('focus'); break
             case 'layout-review': layout.preset('review'); break
-            case 'layout-build': layout.preset('build'); break
             // Navigation
             case 'view-editor': setView('editor'); break
             case 'view-preview': setView('preview'); break

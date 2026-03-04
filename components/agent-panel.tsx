@@ -432,7 +432,7 @@ export function AgentPanel() {
       }
     })
     return unsub
-  }, [onEvent])
+  }, [onEvent, sessionKey, getFile])
 
   // ─── Auto-scroll ──────────────────────────────────────────────
   useEffect(() => {
@@ -632,7 +632,7 @@ export function AgentPanel() {
     const summary = diffEngine.getSummary()
     window.dispatchEvent(new CustomEvent('chat-session-update', {
       detail: {
-        id: 'current',
+        id: chatId,
         title: msg.content.slice(0, 40).replace(/\n/g, ' ') || 'New Chat',
         preview: msg.content.slice(0, 80),
         timestamp: Date.now(),
@@ -642,7 +642,7 @@ export function AgentPanel() {
         mode: agentMode,
       }
     }))
-  }, [agentMode])
+  }, [agentMode, chatId])
 
   // Persist messages to localStorage
   useEffect(() => {

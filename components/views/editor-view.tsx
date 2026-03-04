@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Icon } from '@iconify/react'
@@ -14,7 +14,6 @@ import { FloatingPanel } from '@/components/floating-panel'
 
 const FileExplorer = dynamic(() => import('@/components/file-explorer').then(m => ({ default: m.FileExplorer })), { ssr: false })
 const CodeEditor = dynamic(() => import('@/components/code-editor').then(m => ({ default: m.CodeEditor })), { ssr: false })
-const EnginePanel = dynamic(() => import('@/components/engine-panel').then(m => ({ default: m.EnginePanel })), { ssr: false })
 const AgentPanel = dynamic(() => import('@/components/agent-panel').then(m => ({ default: m.AgentPanel })), { ssr: false })
 
 const PANEL_SPRING = { type: 'spring' as const, stiffness: 500, damping: 35 }
@@ -38,7 +37,6 @@ export function EditorView() {
   // Derived from layout context
   const treeVisible = layout.isVisible('tree')
   const treeWidth = layout.getSize('tree')
-  const engineVisible = layout.isVisible('engine')
   const chatVisible = layout.isVisible('chat')
   const chatWidth = layout.getSize('chat')
   const editorCollapsed = layout.editorCollapsed
@@ -75,43 +73,19 @@ export function EditorView() {
 
   // Command palette events & open-side-chat are now handled by LayoutContext's event bridge
 
-  // ─── Status chip state ───
-  const [terminalActive, setTerminalActive] = useState(false)
+  // ─── Chat unread state ───
   const [agentUnread, setAgentUnread] = useState(false)
-  const [engineRunning, setEngineRunning] = useState(false)
 
   useEffect(() => {
-    const onTerminal = (e: Event) => setTerminalActive((e as CustomEvent).detail?.active ?? true)
     const onAgent = () => { if (!chatVisible) setAgentUnread(true) }
-    const onEngine = (e: Event) => setEngineRunning((e as CustomEvent).detail?.running ?? false)
-    window.addEventListener('terminal-activity', onTerminal)
     window.addEventListener('agent-reply', onAgent)
-    window.addEventListener('engine-status', onEngine)
     return () => {
-      window.removeEventListener('terminal-activity', onTerminal)
       window.removeEventListener('agent-reply', onAgent)
-      window.removeEventListener('engine-status', onEngine)
     }
   }, [chatVisible])
 
   // Clear unread when chat opens
   useEffect(() => { if (chatVisible) setAgentUnread(false) }, [chatVisible])
-
-  // ─── Active rail ref ───
-  const segmentRef = useRef<HTMLDivElement>(null)
-  const [railStyle, setRailStyle] = useState<{ left: number; width: number } | null>(null)
-
-  const updateRail = useCallback(() => {
-    if (!segmentRef.current) return
-    const active = segmentRef.current.querySelector('[data-active="true"]') as HTMLElement | null
-    if (active) {
-      setRailStyle({ left: active.offsetLeft, width: active.offsetWidth })
-    } else {
-      setRailStyle(null)
-    }
-  }, [])
-
-  useLayoutEffect(() => { updateRail() }, [treeVisible, engineVisible, updateRail])
 
   const hasFiles = files.length > 0 || activeFile
   const branchName = repo?.branch ?? local.gitInfo?.branch ?? null
@@ -228,22 +202,7 @@ export function EditorView() {
                   <CodeEditor />
                 </div>
 
-                {/* Engine panel */}
-                {engineVisible && (
-                  <>
-                    <div className="h-[3px] cursor-row-resize hover:bg-[var(--brand)] transition-colors opacity-0 hover:opacity-50 shrink-0"
-                      onMouseDown={e => {
-                        e.preventDefault(); const startY = e.clientY; const startH = 240
-                        const onMove = (ev: MouseEvent) => { /* engine resize handled locally */ }
-                        const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp) }
-                        document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp)
-                      }}
-                    />
-                    <div className="shrink-0 border-t border-[var(--border)]" style={{ height: 240 }}>
-                      <EnginePanel />
-                    </div>
-                  </>
-                )}
+
               </>
             ) : (
               /* Smart empty state */
@@ -275,44 +234,18 @@ export function EditorView() {
 
             {/* Bottom bar */}
             <div className="flex items-center h-10 px-3 border-t border-[var(--border)] bg-[var(--bg-elevated)] shrink-0 gap-2">
-              {/* Segmented toggle group with animated active rail */}
-              <div ref={segmentRef} className="relative inline-flex items-center rounded-lg bg-[color-mix(in_srgb,var(--text-primary)_6%,transparent)] p-[3px] gap-[3px]">
-                {/* Active rail indicator */}
-                {railStyle && (
-                  <span
-                    className="absolute top-[3px] h-[calc(100%-6px)] rounded-md bg-[var(--bg)] shadow-sm pointer-events-none transition-all duration-200 ease-out z-0"
-                    style={{ left: railStyle.left, width: railStyle.width }}
-                  />
-                )}
-
-                <button data-active={treeVisible} onClick={() => layout.toggle('tree')} className={`relative z-[1] h-7 ${isNarrow ? 'px-2.5' : 'px-3'} rounded-md text-[12px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${treeVisible ? 'text-[var(--text-primary)]' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)]'}`} title="Explorer (⌘B)">
-                  <Icon icon="lucide:folder" width={14} height={14} />
-                  {!isNarrow && <span>Files</span>}
-                </button>
-                <button onClick={() => layout.toggle('terminal')} className="relative z-[1] h-7 px-3 rounded-md text-[12px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors text-[var(--text-disabled)] hover:text-[var(--text-secondary)]" title="Terminal (⌘J)">
-                  <Icon icon="lucide:terminal" width={14} height={14} />
-                  {!isNarrow && <span>Terminal</span>}
-                  {terminalActive && <span className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse" />}
-                </button>
-                <button data-active={engineVisible} onClick={() => layout.toggle('engine')} className={`relative z-[1] h-7 px-3 rounded-md text-[12px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${engineVisible ? 'text-[var(--text-primary)]' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)]'}`} title="Engine">
-                  <Icon icon="lucide:cpu" width={14} height={14} />
-                  {!isNarrow && <span>Engine</span>}
-                  {engineRunning && <Icon icon="lucide:loader-2" width={11} height={11} className="animate-spin text-[var(--brand)]" />}
-                </button>
-              </div>
-
-              <button onClick={() => layout.setEditorCollapsed(true)} className="h-7 px-3 rounded-lg text-[12px] font-medium flex items-center gap-1.5 hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] cursor-pointer text-[var(--text-disabled)]" title="Collapse editor (⌘E)">
-                <Icon icon="lucide:minimize-2" width={14} height={14} />
-                <span>Collapse</span>
-              </button>
-
-              <div className="flex-1" />
-
               {branchName && (
                 <span className="text-[12px] font-mono text-[var(--text-disabled)] flex items-center gap-1.5 ml-1">
                   <Icon icon="lucide:git-branch" width={14} height={14} />{branchName}
                 </span>
               )}
+
+              <div className="flex-1" />
+
+              <button onClick={() => layout.setEditorCollapsed(true)} className="h-7 px-3 rounded-lg text-[12px] font-medium flex items-center gap-1.5 hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] cursor-pointer text-[var(--text-disabled)]" title="Collapse editor (⌘E)">
+                <Icon icon="lucide:minimize-2" width={14} height={14} />
+                <span>Collapse</span>
+              </button>
 
               <button onClick={() => layout.toggle('chat')} className={`relative h-7 px-3 rounded-lg text-[12px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${chatVisible ? 'bg-[color-mix(in_srgb,var(--brand)_14%,transparent)] text-[var(--brand)]' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)] hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)]'}`} title="Chat (⌘I)">
                 <Icon icon="lucide:message-square" width={14} height={14} />

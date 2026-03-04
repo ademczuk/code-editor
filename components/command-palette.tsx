@@ -17,14 +17,12 @@ type CommandId =
   // Layout toggles
   | 'toggle-files'
   | 'toggle-terminal'
-  | 'toggle-engine'
   | 'toggle-chat'
   | 'toggle-plugins'
   | 'collapse-editor'
   // Layout presets
   | 'layout-focus'
   | 'layout-review'
-  | 'layout-build'
   // Navigation
   | 'view-editor'
   | 'view-preview'
@@ -74,7 +72,6 @@ const COMMANDS: CommandItem[] = [
   // Layout toggles
   { id: 'toggle-files', label: 'Toggle file explorer', hint: 'Show or hide the file tree', keywords: ['files', 'tree', 'explorer', 'sidebar'], icon: 'lucide:folder', shortcut: '\u2318B', group: 'layout' },
   { id: 'toggle-terminal', label: 'Toggle terminal', hint: 'Show or hide the terminal panel', keywords: ['terminal', 'shell', 'console'], icon: 'lucide:terminal', shortcut: '\u2318J', group: 'layout' },
-  { id: 'toggle-engine', label: 'Toggle engine panel', hint: 'Show or hide the engine output', keywords: ['engine', 'output', 'build', 'logs'], icon: 'lucide:cpu', group: 'layout' },
   { id: 'toggle-chat', label: 'Toggle agent chat', hint: 'Show or hide the AI agent panel', keywords: ['chat', 'agent', 'ai', 'assistant'], icon: 'lucide:message-square', shortcut: '\u2318I', group: 'layout' },
   { id: 'toggle-plugins', label: 'Toggle plugins sidebar', hint: 'Show or hide plugin widgets', keywords: ['plugins', 'spotify', 'youtube', 'widgets'], icon: 'lucide:puzzle', group: 'layout' },
   { id: 'collapse-editor', label: 'Collapse editor', hint: 'Minimize editor to icon rail', keywords: ['collapse', 'minimize', 'hide', 'editor'], icon: 'lucide:minimize-2', shortcut: '\u2318E', group: 'layout' },
@@ -82,7 +79,6 @@ const COMMANDS: CommandItem[] = [
   // Layout presets
   { id: 'layout-focus', label: 'Layout: Focus', hint: 'Editor only \u2014 no panels, pure code', keywords: ['focus', 'zen', 'clean', 'minimal', 'distraction'], icon: 'lucide:maximize-2', group: 'preset' },
   { id: 'layout-review', label: 'Layout: Review', hint: 'Files + editor + chat for code review', keywords: ['review', 'browse', 'explore', 'full'], icon: 'lucide:columns-3', group: 'preset' },
-  { id: 'layout-build', label: 'Layout: Build', hint: 'Editor + terminal + engine for build/debug', keywords: ['build', 'debug', 'run', 'terminal', 'compile'], icon: 'lucide:hammer', group: 'preset' },
 
   // Navigation
   { id: 'view-editor', label: 'Go to Editor', hint: 'Switch to the editor view', keywords: ['editor', 'code', 'edit'], icon: 'lucide:code-2', group: 'navigate' },
