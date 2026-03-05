@@ -316,7 +316,8 @@ function EntryView({ entry }: { entry: TerminalEntry }) {
 // ─── Main component ──────────────────────────────────────
 
 export function GatewayTerminal() {
-  const { isConnected, sendRequest, onEvent } = useGateway()
+  const { status, sendRequest, onEvent } = useGateway()
+  const isConnected = status === 'connected'
 
   const [entries, setEntries] = useState<TerminalEntry[]>([])
   const [input, setInput] = useState('')
