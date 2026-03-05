@@ -14,6 +14,12 @@ interface TerminalPanelProps {
   onHeightChange: (h: number) => void
   floating?: boolean
   onToggleFloating?: () => void
+  /** Restart terminal session whenever pane opens or mode changes. */
+  refreshOnOpenOrMode?: boolean
+  /** Token that changes when app mode changes. */
+  refreshToken?: string
+  /** Optional command to run after a refresh/open. */
+  startupCommand?: string
 }
 
 const FILE_EXT_PATTERN =
@@ -227,6 +233,9 @@ interface TerminalPaneProps {
   onFileOpen?: (path: string, line?: number, col?: number) => void
   /** Hide internal header (used when parent provides its own header, e.g. TUI center mode) */
   hideHeader?: boolean
+  refreshOnOpenOrMode?: boolean
+  refreshToken?: string
+  startupCommand?: string
 }
 
 function TerminalPane({
@@ -239,11 +248,16 @@ function TerminalPane({
   cwd,
   onFileOpen,
   hideHeader,
+  refreshOnOpenOrMode,
+  refreshToken,
+  startupCommand,
 }: TerminalPaneProps) {
   const [activeId, setActiveId] = useState<number | null>(session.terminalId)
   const [terminalError, setTerminalError] = useState<string | null>(null)
   const termRef = useRef<HTMLDivElement>(null)
   const onFileOpenRef = useRef(onFileOpen)
+  const wasVisibleRef = useRef(false)
+  const refreshTokenRef = useRef<string | undefined>(undefined)
 
   useEffect(() => {
     onFileOpenRef.current = onFileOpen
@@ -306,6 +320,15 @@ function TerminalPane({
       const id = await ensureSession(cwd, listeners())
       if (id == null) {
         if (!session.creating) {
+          const sinceKill = Date.now() - session.lastKilledAt
+          const inDebounceWindow = sinceKill < CREATE_DEBOUNCE_MS
+          if (inDebounceWindow) {
+            const retryIn = Math.max(50, CREATE_DEBOUNCE_MS - sinceKill)
+            setTimeout(() => {
+              void createTerminal(initialCommand)
+            }, retryIn)
+            return
+          }
           setTerminalError('Terminal is unavailable outside the desktop runtime.')
         }
         return
@@ -407,6 +430,7 @@ function TerminalPane({
 
   // Auto-create first terminal when pane becomes ready (skip if user manually closed)
   useEffect(() => {
+    if (refreshOnOpenOrMode) return
     if (!visible || !isDesktop || activeId != null || session.manualClose) return
 
     // Debounce: wait for HMR churn to settle
@@ -417,7 +441,42 @@ function TerminalPane({
       session.lastKilledAt > 0 ? CREATE_DEBOUNCE_MS : 0,
     )
     return () => clearTimeout(timer)
-  }, [visible, isDesktop, activeId, createTerminal])
+  }, [visible, isDesktop, activeId, createTerminal, refreshOnOpenOrMode])
+
+  // Optional auto-refresh behavior for flaky PTY state:
+  // recreate the backend session on pane-open and on mode changes.
+  useEffect(() => {
+    const wasVisible = wasVisibleRef.current
+    const previousToken = refreshTokenRef.current
+    const opened = visible && !wasVisible
+    const modeChangedWhileVisible =
+      visible && previousToken !== undefined && refreshToken !== previousToken
+    wasVisibleRef.current = visible
+    refreshTokenRef.current = refreshToken
+
+    if (!refreshOnOpenOrMode) return
+    if (!isDesktop || !visible) return
+    if (!opened && !modeChangedWhileVisible) return
+
+    let cancelled = false
+    ;(async () => {
+      session.manualClose = false
+      await killSession()
+      if (cancelled) return
+      setActiveId(null)
+      const sinceKill = Date.now() - session.lastKilledAt
+      const delay = Math.max(0, CREATE_DEBOUNCE_MS - sinceKill)
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay))
+      }
+      if (cancelled) return
+      await createTerminal(startupCommand)
+    })().catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
+  }, [visible, isDesktop, refreshOnOpenOrMode, refreshToken, startupCommand, createTerminal])
 
   // Listen for script run requests from the preview panel
   useEffect(() => {
@@ -540,6 +599,9 @@ export function TerminalPanel({
   onHeightChange,
   floating,
   onToggleFloating,
+  refreshOnOpenOrMode,
+  refreshToken,
+  startupCommand,
 }: TerminalPanelProps) {
   const { version: themeVersion } = useTheme()
   const local = useLocal()
@@ -615,6 +677,9 @@ export function TerminalPanel({
           cwd={local.localMode ? local.rootPath : null}
           onFileOpen={handleFileOpen}
           hideHeader={isCenter}
+          refreshOnOpenOrMode={refreshOnOpenOrMode}
+          refreshToken={refreshToken}
+          startupCommand={startupCommand}
         />
       </div>
     </div>

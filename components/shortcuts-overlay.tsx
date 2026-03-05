@@ -45,7 +45,7 @@ const STATIC_SECTIONS = [
       { keys: ['/refactor'], desc: 'Refactor code' },
       { keys: ['/generate'], desc: 'Generate new code' },
       { keys: ['/search'], desc: 'Search repo' },
-      { keys: ['/commit'], desc: 'Commit changes' },
+      { keys: ['/commit'], desc: 'Commit changes (AI if empty)' },
       { keys: ['/diff'], desc: 'Show changes' },
       { keys: ['/unstage'], desc: 'Unstage all staged files' },
       { keys: ['/undo'], desc: 'Undo last commit' },
@@ -55,15 +55,20 @@ const STATIC_SECTIONS = [
 
 export function ShortcutsOverlay({ open, onClose }: ShortcutsOverlayProps) {
   const [isDesktop, setIsDesktop] = useState(false)
-  useEffect(() => { setIsDesktop(isTauri()) }, [])
+  useEffect(() => {
+    setIsDesktop(isTauri())
+  }, [])
 
-  const sections = useMemo(() => [
-    {
-      title: 'Navigation',
-      shortcuts: isDesktop ? [...NAV_SHORTCUTS, ...NAV_TERMINAL_SHORTCUTS] : NAV_SHORTCUTS,
-    },
-    ...STATIC_SECTIONS,
-  ], [isDesktop])
+  const sections = useMemo(
+    () => [
+      {
+        title: 'Navigation',
+        shortcuts: isDesktop ? [...NAV_SHORTCUTS, ...NAV_TERMINAL_SHORTCUTS] : NAV_SHORTCUTS,
+      },
+      ...STATIC_SECTIONS,
+    ],
+    [isDesktop],
+  )
 
   useEffect(() => {
     if (!open) return
@@ -80,17 +85,22 @@ export function ShortcutsOverlay({ open, onClose }: ShortcutsOverlayProps) {
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      onClick={onClose}
+    >
       <div
         className="w-full max-w-[520px] rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl overflow-hidden animate-scale-in"
-        onClick={e => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border)] relative">
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[var(--brand)] to-transparent opacity-30" />
           <div className="flex items-center gap-2">
             <Icon icon="lucide:keyboard" width={16} height={16} className="text-[var(--brand)]" />
-            <span className="text-[14px] font-semibold text-[var(--text-primary)]">Keyboard Shortcuts</span>
+            <span className="text-[14px] font-semibold text-[var(--text-primary)]">
+              Keyboard Shortcuts
+            </span>
           </div>
           <button
             onClick={onClose}
@@ -102,16 +112,21 @@ export function ShortcutsOverlay({ open, onClose }: ShortcutsOverlayProps) {
 
         {/* Sections */}
         <div className="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
-          {sections.map(section => (
+          {sections.map((section) => (
             <div key={section.title}>
               <h3 className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)] mb-2.5 flex items-center gap-2">
                 {section.title}
                 <span className="flex-1 h-px bg-[var(--border)]" />
               </h3>
               <div className="space-y-0.5">
-                {section.shortcuts.map(s => (
-                  <div key={s.desc} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-[var(--bg-subtle)] transition-colors group">
-                    <span className="text-[12px] text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors">{s.desc}</span>
+                {section.shortcuts.map((s) => (
+                  <div
+                    key={s.desc}
+                    className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-[var(--bg-subtle)] transition-colors group"
+                  >
+                    <span className="text-[12px] text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors">
+                      {s.desc}
+                    </span>
                     <div className="flex items-center gap-1">
                       {s.keys.map((key, i) => (
                         <kbd

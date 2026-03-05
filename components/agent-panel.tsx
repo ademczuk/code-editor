@@ -16,6 +16,11 @@ import { parseEditProposals, type EditProposal } from '@/lib/edit-parser'
 import { showInlineDiff, type InlineDiffResult } from '@/lib/inline-diff'
 import { diffEngine } from '@/lib/streaming-diff'
 import { handleChatEvent, type ChatMessage, type StreamState } from '@/lib/chat-stream'
+import {
+  buildEditorPatchSnippet,
+  generateCommitMessageWithGateway,
+  type CommitMessageChange,
+} from '@/lib/gateway-commit-message'
 import { MessageList } from '@/components/chat/message-list'
 import { ChatInputBar } from '@/components/chat/chat-input-bar'
 import { emit, on } from '@/lib/events'
@@ -575,6 +580,59 @@ export function AgentPanel() {
     })
   }, [])
 
+  const collectCommitChangesForGeneration = useCallback(async (): Promise<
+    CommitMessageChange[]
+  > => {
+    const changes: CommitMessageChange[] = []
+    const seenPaths = new Set<string>()
+
+    if (local.localMode && local.rootPath && local.gitInfo?.is_repo) {
+      const gitStatuses = local.gitInfo.status ?? []
+      for (const statusEntry of gitStatuses) {
+        seenPaths.add(statusEntry.path)
+        const hasStaged = statusEntry.index_status !== ' ' && statusEntry.index_status !== '?'
+        const hasWorktree = statusEntry.worktree_status !== ' '
+        const stagedOnly = hasStaged && !hasWorktree
+        let patch = ''
+        try {
+          patch = await local.getDiff(statusEntry.path, stagedOnly)
+          if (!patch && hasStaged) {
+            patch = await local.getDiff(statusEntry.path, true)
+          }
+        } catch {}
+
+        const summaryBits: string[] = []
+        if (statusEntry.status === '??') summaryBits.push('untracked')
+        if (hasStaged) summaryBits.push('staged')
+        if (hasWorktree) summaryBits.push('unstaged')
+
+        changes.push({
+          path: statusEntry.path,
+          status:
+            statusEntry.status?.trim() ||
+            `${statusEntry.index_status}${statusEntry.worktree_status}`.trim() ||
+            'M',
+          summary: summaryBits.join(', ') || undefined,
+          patch: patch || undefined,
+        })
+      }
+    }
+
+    for (const file of files) {
+      if (!file.dirty || file.kind !== 'text') continue
+      if (seenPaths.has(file.path)) continue
+      const snippet = buildEditorPatchSnippet(file.originalContent, file.content)
+      changes.push({
+        path: file.path,
+        status: 'M',
+        summary: 'unsaved editor changes',
+        patch: snippet,
+      })
+    }
+
+    return changes
+  }, [files, local])
+
   // ─── Commit result listener ──────────────────────────────────
   useEffect(() => {
     return on('agent-commit-result', (detail) => {
@@ -617,16 +675,6 @@ export function AgentPanel() {
     // ─── Slash command interception ───────────────────────────
     if (text.startsWith('/commit')) {
       const commitMsg = text.replace(/^\/commit\s*/, '').trim()
-      if (!commitMsg) {
-        appendMessage({
-          id: crypto.randomUUID(),
-          role: 'system',
-          type: 'status',
-          content: 'Usage: /commit <message>',
-          timestamp: Date.now(),
-        })
-        return
-      }
       appendMessage({
         id: crypto.randomUUID(),
         role: 'user',
@@ -634,14 +682,85 @@ export function AgentPanel() {
         content: text,
         timestamp: Date.now(),
       })
-      emit('agent-commit', { message: commitMsg })
+
+      if (commitMsg) {
+        emit('agent-commit', { message: commitMsg })
+        appendMessage({
+          id: crypto.randomUUID(),
+          role: 'system',
+          type: 'status',
+          content: 'Committing...',
+          timestamp: Date.now(),
+        })
+        return
+      }
+
+      if (!isConnected) {
+        appendMessage({
+          id: crypto.randomUUID(),
+          role: 'system',
+          type: 'error',
+          content: 'Gateway disconnected — cannot generate commit message.',
+          timestamp: Date.now(),
+        })
+        return
+      }
+
       appendMessage({
         id: crypto.randomUUID(),
         role: 'system',
         type: 'status',
-        content: 'Committing...',
+        content: 'Generating commit message with gateway AI...',
         timestamp: Date.now(),
       })
+
+      try {
+        await ensureSessionInit()
+        const changes = await collectCommitChangesForGeneration()
+        if (changes.length === 0) {
+          appendMessage({
+            id: crypto.randomUUID(),
+            role: 'system',
+            type: 'status',
+            content: 'No changes detected to commit.',
+            timestamp: Date.now(),
+          })
+          return
+        }
+
+        const generatedCommitMsg = await generateCommitMessageWithGateway({
+          sendRequest,
+          onEvent,
+          sessionKey,
+          repoFullName: repo?.fullName ?? local.remoteRepo ?? undefined,
+          branch: repo?.branch ?? local.gitInfo?.branch ?? undefined,
+          changes,
+        })
+
+        appendMessage({
+          id: crypto.randomUUID(),
+          role: 'system',
+          type: 'status',
+          content: `Generated commit message: ${generatedCommitMsg}`,
+          timestamp: Date.now(),
+        })
+        emit('agent-commit', { message: generatedCommitMsg })
+        appendMessage({
+          id: crypto.randomUUID(),
+          role: 'system',
+          type: 'status',
+          content: 'Committing...',
+          timestamp: Date.now(),
+        })
+      } catch (err) {
+        appendMessage({
+          id: crypto.randomUUID(),
+          role: 'system',
+          type: 'error',
+          content: `Generate commit message failed: ${err instanceof Error ? err.message : String(err)}`,
+          timestamp: Date.now(),
+        })
+      }
       return
     }
     if (text === '/changes') {
@@ -1009,11 +1128,14 @@ export function AgentPanel() {
     contextAttachments,
     imageAttachments,
     local,
+    repo,
     files,
     sendRequest,
+    onEvent,
     buildContext,
     appendMessage,
     ensureSessionInit,
+    collectCommitChangesForGeneration,
     logChatDebug,
   ])
 
@@ -1221,7 +1343,11 @@ export function AgentPanel() {
       { cmd: '/refactor', desc: 'Refactor code', icon: 'lucide:refresh-cw' },
       { cmd: '/generate', desc: 'Generate new code', icon: 'lucide:plus' },
       { cmd: '/search', desc: 'Search across repo', icon: 'lucide:search' },
-      { cmd: '/commit', desc: 'Commit changes', icon: 'lucide:git-commit-horizontal' },
+      {
+        cmd: '/commit',
+        desc: 'Commit changes (AI if empty)',
+        icon: 'lucide:git-commit-horizontal',
+      },
       { cmd: '/diff', desc: 'Show changes', icon: 'lucide:git-compare' },
       { cmd: '/changes', desc: 'Pre-commit review', icon: 'lucide:eye' },
       { cmd: '/unstage', desc: 'Unstage all staged files', icon: 'lucide:minus-circle' },

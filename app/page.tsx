@@ -109,6 +109,8 @@ export default function EditorLayout() {
   const terminalVisible = layout.isVisible('terminal')
   const terminalHeight = layout.getSize('terminal')
   const terminalFloating = layout.isFloating('terminal')
+  const terminalRefreshToken = mode
+  const terminalStartupCommand = modeSpec.terminalCenter ? 'openclaw tui' : undefined
 
   // ─── Minimal state ──────────────────────────────────
   const [isTauriDesktop, setIsTauriDesktop] = useState(false)
@@ -133,6 +135,16 @@ export default function EditorLayout() {
   const [onboardingOpen, setOnboardingOpen] = useState(false)
 
   const dirtyCount = useMemo(() => files.filter((f) => f.dirty).length, [files])
+  const ensureTuiTerminalVisible = useCallback(() => {
+    layout.setFloating('terminal', false)
+    layout.show('terminal')
+  }, [layout])
+
+  // Entering TUI should always surface the terminal view.
+  useEffect(() => {
+    if (!modeSpec.terminalCenter) return
+    ensureTuiTerminalVisible()
+  }, [modeSpec.terminalCenter, ensureTuiTerminalVisible])
 
   // ─── Tauri detection ───────────────────────────────────
   useEffect(() => {
@@ -542,7 +554,14 @@ export default function EditorLayout() {
             {/* TUI mode: terminal fills center */}
             {modeSpec.terminalCenter && terminalVisible ? (
               <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden">
-                <TerminalPanel visible={true} height={9999} onHeightChange={() => {}} />
+                <TerminalPanel
+                  visible={true}
+                  height={9999}
+                  onHeightChange={() => {}}
+                  refreshOnOpenOrMode={true}
+                  refreshToken={terminalRefreshToken}
+                  startupCommand={terminalStartupCommand}
+                />
               </div>
             ) : (
               <ViewRouter />
@@ -586,6 +605,9 @@ export default function EditorLayout() {
                   onHeightChange={(h: number) => layout.resize('terminal', h)}
                   floating={terminalFloating}
                   onToggleFloating={() => layout.setFloating('terminal', !terminalFloating)}
+                  refreshOnOpenOrMode={true}
+                  refreshToken={terminalRefreshToken}
+                  startupCommand={terminalStartupCommand}
                 />
               </div>
             )}
@@ -642,6 +664,9 @@ export default function EditorLayout() {
                       onHeightChange={(h: number) => layout.resize('terminal', h)}
                       floating={terminalFloating}
                       onToggleFloating={() => layout.setFloating('terminal', !terminalFloating)}
+                      refreshOnOpenOrMode={true}
+                      refreshToken={terminalRefreshToken}
+                      startupCommand={terminalStartupCommand}
                     />
                   </div>
                 </motion.div>
@@ -669,6 +694,9 @@ export default function EditorLayout() {
               onHeightChange={(h: number) => layout.resize('terminal', h)}
               floating={terminalFloating}
               onToggleFloating={() => layout.setFloating('terminal', !terminalFloating)}
+              refreshOnOpenOrMode={true}
+              refreshToken={terminalRefreshToken}
+              startupCommand={terminalStartupCommand}
             />
           </FloatingPanel>
         )}
