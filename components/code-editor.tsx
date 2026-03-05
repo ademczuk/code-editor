@@ -46,24 +46,49 @@ if (typeof self !== 'undefined' && !(self as any).MonacoEnvironment) {
 }
 
 function isAbortError(err: unknown): boolean {
+  if (typeof err === 'string') {
+    const lower = err.toLowerCase()
+    if (
+      lower === 'canceled' ||
+      lower === 'cancelled' ||
+      lower.startsWith('canceled:') ||
+      lower.startsWith('cancelled:') ||
+      lower.includes('the operation was aborted')
+    ) {
+      return true
+    }
+  }
   if (err instanceof DOMException && err.name === 'AbortError') return true
   if (
     err instanceof Error &&
-    (err.name === 'AbortError' || err.message === 'The operation was aborted.')
+    (err.name === 'AbortError' ||
+      err.name === 'Canceled' ||
+      err.name === 'CancellationError' ||
+      err.name === 'CanceledError' ||
+      err.message === 'The operation was aborted.' ||
+      err.message === 'Canceled' ||
+      err.message === 'Cancelled' ||
+      err.message.startsWith('Canceled:') ||
+      err.message.startsWith('Cancelled:'))
   )
     return true
   if (
     typeof err === 'object' &&
     err !== null &&
     'message' in err &&
-    (err as { message: unknown }).message === 'The operation was aborted.'
+    ((err as { message: unknown }).message === 'The operation was aborted.' ||
+      (err as { message: unknown }).message === 'Canceled' ||
+      (err as { message: unknown }).message === 'Cancelled')
   )
     return true
   if (
     typeof err === 'object' &&
     err !== null &&
     'name' in err &&
-    (err as { name: unknown }).name === 'AbortError'
+    ((err as { name: unknown }).name === 'AbortError' ||
+      (err as { name: unknown }).name === 'Canceled' ||
+      (err as { name: unknown }).name === 'CancellationError' ||
+      (err as { name: unknown }).name === 'CanceledError')
   )
     return true
   return false
@@ -77,7 +102,10 @@ if (typeof window !== 'undefined') {
       args.some(
         (a) =>
           typeof a === 'string' &&
-          (a.includes('The operation was aborted') || a.includes('AbortError')),
+          (a.includes('The operation was aborted') ||
+            a.includes('AbortError') ||
+            a.includes('Canceled') ||
+            a.includes('Cancelled')),
       )
     )
       return
@@ -87,7 +115,13 @@ if (typeof window !== 'undefined') {
   window.addEventListener(
     'error',
     (e) => {
-      if (isAbortError(e.error) || (e.message && e.message.includes('The operation was aborted'))) {
+      if (
+        isAbortError(e.error) ||
+        (e.message &&
+          (e.message.includes('The operation was aborted') ||
+            e.message.includes('Canceled') ||
+            e.message.includes('Cancelled')))
+      ) {
         e.preventDefault()
         e.stopImmediatePropagation()
         return

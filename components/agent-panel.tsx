@@ -1032,7 +1032,8 @@ export function AgentPanel() {
           : agentMode === 'plan'
             ? '[Mode: Plan — outline a step-by-step plan before making changes. Present the plan to the user for approval before executing.]\n'
             : '[Mode: Agent — make direct code changes and edits autonomously.]\n'
-      const fullMessage = modePrefix + (context || '') + attachCtx + '\n\n' + text
+      // Build silent context (not shown in chat, passed separately to gateway)
+      const silentContext = [modePrefix, context || '', attachCtx].filter(Boolean).join('\n\n')
       setContextAttachments([])
       setImageAttachments([])
       const idemKey = `ce-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
@@ -1042,13 +1043,13 @@ export function AgentPanel() {
       logChatDebug('chat.send request', {
         sessionKey,
         idempotencyKey: idemKey,
-        promptChars: fullMessage.length,
-        contextChars: context.length,
-        attachmentChars: attachCtx.length,
+        promptChars: text.length,
+        contextChars: silentContext.length,
       })
       const resp = (await sendRequest('chat.send', {
         sessionKey,
-        message: fullMessage,
+        message: text,
+        context: silentContext,
         idempotencyKey: idemKey,
       })) as Record<string, unknown> | undefined
 
@@ -1184,19 +1185,20 @@ export function AgentPanel() {
       })
 
       const context = buildContext()
-      const fullMessage = context ? `${context}\n\n${prompt}` : prompt
       const idemKey = `ce-inline-${Date.now()}`
       sentKeysRef.current.add(idemKey)
       setIsStreaming(true)
       logChatDebug('inline chat.send request', {
         sessionKey,
         idempotencyKey: idemKey,
-        promptChars: fullMessage.length,
+        promptChars: prompt.length,
+        contextChars: context.length,
       })
 
       sendRequest('chat.send', {
         sessionKey,
-        message: fullMessage,
+        message: prompt,
+        context: context || undefined,
         idempotencyKey: idemKey,
       })
         .then((resp) => {

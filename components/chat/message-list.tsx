@@ -96,6 +96,7 @@ export function MessageList({
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const [thinkingOpen, setThinkingOpen] = useState(false)
+  const [showSystemMessages, setShowSystemMessages] = useState(false)
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -157,6 +158,9 @@ export function MessageList({
           const isUser = msg.role === 'user'
           const isSystem = msg.role === 'system'
           const isAssistant = msg.role === 'assistant'
+
+          // Hide system status/tool messages by default (errors always show)
+          if (isSystem && !showSystemMessages && t !== 'error') return null
 
           const bubbleClass = isUser
             ? 'bg-[color-mix(in_srgb,var(--brand)_15%,transparent)] text-[var(--text-primary)] rounded-br-sm'
@@ -507,6 +511,27 @@ export function MessageList({
             )}
           </div>
         )}
+        {/* Hidden system messages toggle */}
+        {(() => {
+          const hiddenCount = messages.filter(
+            (m) => m.role === 'system' && (m.type ?? 'text') !== 'error',
+          ).length
+          if (hiddenCount === 0) return null
+          return (
+            <button
+              onClick={() => setShowSystemMessages((v) => !v)}
+              className="mx-auto flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] transition-colors cursor-pointer"
+            >
+              <Icon
+                icon={showSystemMessages ? 'lucide:eye-off' : 'lucide:eye'}
+                width={9}
+                height={9}
+              />
+              {showSystemMessages ? 'Hide' : 'Show'} {hiddenCount} system{' '}
+              {hiddenCount === 1 ? 'message' : 'messages'}
+            </button>
+          )
+        })()}
       </div>
     </>
   )

@@ -7,6 +7,8 @@ import { usePlugins } from '@/context/plugin-context'
 
 const STORAGE_KEY = 'knot:youtube-playlist'
 const HISTORY_KEY = 'knot:youtube-history'
+const VOLUME_KEY = 'knot:youtube-volume'
+const MUTED_KEY = 'knot:youtube-muted'
 const MAX_HISTORY = 8
 
 interface PlaylistInfo {
@@ -50,10 +52,15 @@ function parseYouTubeUrl(input: string): PlaylistInfo | null {
 }
 
 function buildEmbedUrl(info: PlaylistInfo): string {
-  if (info.type === 'playlist') {
-    return `https://www.youtube.com/embed/videoseries?list=${info.id}`
-  }
-  return `https://www.youtube.com/embed/${info.id}`
+  const base =
+    info.type === 'playlist'
+      ? `https://www.youtube.com/embed/videoseries?list=${info.id}`
+      : `https://www.youtube.com/embed/${info.id}`
+  const url = new URL(base)
+  url.searchParams.set('enablejsapi', '1')
+  url.searchParams.set('playsinline', '1')
+  url.searchParams.set('rel', '0')
+  return url.toString()
 }
 
 interface HistoryEntry {
@@ -96,6 +103,25 @@ export function YouTubePlayer() {
   const [history, setHistory] = useState<HistoryEntry[]>(loadHistory)
   const [error, setError] = useState<string | null>(null)
   const [showInput, setShowInput] = useState(false)
+  const [volume, setVolume] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem(VOLUME_KEY)
+      if (raw) {
+        const parsed = Number(raw)
+        if (Number.isFinite(parsed)) {
+          return Math.max(0, Math.min(100, Math.round(parsed)))
+        }
+      }
+    } catch {}
+    return 70
+  })
+  const [muted, setMuted] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(MUTED_KEY) === 'true'
+    } catch {
+      return false
+    }
+  })
   const [ratio, setRatio] = useState<'16 / 9' | '4 / 3' | '1 / 1'>(() => {
     try {
       return (
@@ -106,6 +132,7 @@ export function YouTubePlayer() {
     }
   })
   const inputRef = useRef<HTMLInputElement>(null)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
     if (current) {
@@ -126,6 +153,48 @@ export function YouTubePlayer() {
       localStorage.setItem('knot:youtube-ratio', ratio)
     } catch {}
   }, [ratio])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(VOLUME_KEY, String(volume))
+    } catch {}
+  }, [volume])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MUTED_KEY, String(muted))
+    } catch {}
+  }, [muted])
+
+  const sendPlayerCommand = useCallback((func: string, args: unknown[] = []) => {
+    const playerWindow = iframeRef.current?.contentWindow
+    if (!playerWindow) return
+    playerWindow.postMessage(
+      JSON.stringify({
+        event: 'command',
+        func,
+        args,
+      }),
+      '*',
+    )
+  }, [])
+
+  const syncPlayerVolume = useCallback(() => {
+    sendPlayerCommand('setVolume', [volume])
+    if (muted || volume === 0) {
+      sendPlayerCommand('mute')
+      return
+    }
+    sendPlayerCommand('unMute')
+  }, [sendPlayerCommand, volume, muted])
+
+  useEffect(() => {
+    if (!current) return
+    const timer = window.setTimeout(() => {
+      syncPlayerVolume()
+    }, 120)
+    return () => window.clearTimeout(timer)
+  }, [current, volume, muted, syncPlayerVolume])
 
   const popoutPiP = useCallback(() => {
     setPipPluginId('youtube-player')
@@ -182,6 +251,19 @@ export function YouTubePlayer() {
 
   const clearCurrent = useCallback(() => {
     setCurrent(null)
+  }, [])
+
+  const handleVolumeChange = useCallback(
+    (value: number) => {
+      const next = Math.max(0, Math.min(100, Math.round(value)))
+      setVolume(next)
+      setMuted(next === 0 ? true : false)
+    },
+    [setVolume, setMuted],
+  )
+
+  const toggleMute = useCallback(() => {
+    setMuted((prev) => !prev)
   }, [])
 
   const removeHistoryItem = useCallback((id: string, e: React.MouseEvent) => {
@@ -369,12 +451,14 @@ export function YouTubePlayer() {
               style={{ aspectRatio: ratio }}
             >
               <iframe
+                ref={iframeRef}
                 src={buildEmbedUrl(current)}
                 className="w-full h-full border-0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
                 loading="lazy"
                 title={`YouTube ${current.label}`}
+                onLoad={syncPlayerVolume}
               />
             </div>
           </div>
@@ -396,7 +480,7 @@ export function YouTubePlayer() {
 
       {/* Footer */}
       {current && (
-        <div className="flex items-center h-6 px-2.5 border-t border-[var(--border)] shrink-0">
+        <div className="flex items-center h-7 px-2.5 border-t border-[var(--border)] shrink-0 gap-1.5">
           <Icon
             icon={current.type === 'playlist' ? 'lucide:list-music' : 'lucide:play'}
             width={9}
@@ -406,6 +490,33 @@ export function YouTubePlayer() {
           <span className="text-[8px] text-[var(--text-disabled)] ml-1 truncate">
             {current.label}
           </span>
+          <button
+            onClick={toggleMute}
+            className="ml-2 p-0.5 rounded hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] cursor-pointer"
+            title={muted || volume === 0 ? 'Unmute' : 'Mute'}
+          >
+            <Icon
+              icon={
+                muted || volume === 0
+                  ? 'lucide:volume-x'
+                  : volume < 50
+                    ? 'lucide:volume-1'
+                    : 'lucide:volume-2'
+              }
+              width={10}
+              height={10}
+            />
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={volume}
+            onChange={(e) => handleVolumeChange(Number(e.target.value))}
+            className="w-16 h-1 accent-[#FF0000] cursor-pointer"
+            aria-label="YouTube volume"
+          />
+          <span className="text-[8px] text-[var(--text-disabled)] w-7 text-right">{volume}%</span>
           <div className="flex-1" />
           <button
             onClick={clearCurrent}
