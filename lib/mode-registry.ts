@@ -10,19 +10,26 @@ export interface ModeSpec {
   visibleViews: ViewId[]
   defaultView: ViewId
   panelDefaults: Partial<Record<PanelId, boolean>>
+  /** Terminal fills center (no editor views unless toggled) */
+  terminalCenter?: boolean
+  /** Auto-expand editor when file opens */
+  autoExpandEditor?: boolean
+  /** Hide tab strip entirely */
+  hideTabs?: boolean
 }
 
 export const MODE_REGISTRY: Record<AppMode, ModeSpec> = {
   classic: {
     id: 'classic',
     label: 'Classic',
-    description: 'Full editor workflow with panels',
+    description: 'Traditional editor — no chat, files open',
     visibleViews: ['editor', 'preview', 'git', 'prs'],
     defaultView: 'editor',
+    autoExpandEditor: true,
     panelDefaults: {
-      sidebar: true,
-      tree: false,
-      chat: true,
+      sidebar: false,
+      tree: true,
+      chat: false,
       terminal: false,
       plugins: true,
       engine: false,
@@ -46,9 +53,11 @@ export const MODE_REGISTRY: Record<AppMode, ModeSpec> = {
   tui: {
     id: 'tui',
     label: 'TUI',
-    description: 'Minimal terminal-first shell',
+    description: 'Terminal-first — editor available on demand',
     visibleViews: ['editor', 'git'],
     defaultView: 'editor',
+    terminalCenter: true,
+    hideTabs: true,
     panelDefaults: {
       sidebar: false,
       tree: false,

@@ -20,13 +20,15 @@ export function AppModeProvider({ children }: { children: ReactNode }) {
   const layout = useLayout()
   const { activeView, setView } = useView()
 
-  const [mode, setModeState] = useState<AppMode>(() => {
+  const [mode, setModeState] = useState<AppMode>('classic')
+
+  // Hydrate from localStorage after mount to avoid SSR mismatch
+  useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY) as AppMode | null
-      if (raw && raw in MODE_REGISTRY) return raw
+      if (raw && raw in MODE_REGISTRY) setModeState(raw)
     } catch {}
-    return 'classic'
-  })
+  }, [])
 
   const setMode = useCallback((next: AppMode) => {
     setModeState(next)
@@ -45,6 +47,11 @@ export function AppModeProvider({ children }: { children: ReactNode }) {
     // Ensure active view is valid in this mode
     if (!spec.visibleViews.includes(activeView)) {
       setView(spec.defaultView)
+    }
+
+    // Auto-expand editor in classic mode
+    if (spec.autoExpandEditor) {
+      layout.setEditorCollapsed(false)
     }
   }, [mode, layout, activeView, setView])
 

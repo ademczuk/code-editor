@@ -284,13 +284,15 @@ export function WorkspaceSidebar({ activeId, onSelect, onNew, onDelete, collapse
           <div className="px-2.5 py-2 shrink-0">
             <div className="flex items-center justify-between rounded-xl bg-[color-mix(in_srgb,var(--text-primary)_4%,transparent)] px-2 py-1.5">
               <div className="flex items-center gap-1">
-                <button
-                  onClick={() => window.dispatchEvent(new CustomEvent('toggle-terminal'))}
-                  className="w-[34px] h-[34px] flex items-center justify-center rounded-xl hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] transition-colors cursor-pointer"
-                  title="Terminal (⌘J)"
-                >
-                  <Icon icon="lucide:terminal" width={17} height={17} />
-                </button>
+                {isTauriDesktop && (
+                  <button
+                    onClick={() => window.dispatchEvent(new CustomEvent('toggle-terminal'))}
+                    className="w-[34px] h-[34px] flex items-center justify-center rounded-xl hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] transition-colors cursor-pointer"
+                    title="Terminal (⌘J)"
+                  >
+                    <Icon icon="lucide:terminal" width={17} height={17} />
+                  </button>
+                )}
                 <button
                   onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', metaKey: true }))}
                   className="w-[34px] h-[34px] flex items-center justify-center rounded-xl hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] transition-colors cursor-pointer"

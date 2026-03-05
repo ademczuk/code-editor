@@ -70,12 +70,20 @@ if (typeof window !== 'undefined') {
 }
 
 function WelcomeView() {
+  const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
   const recentFolders = (() => {
     try {
       const raw = localStorage.getItem('code-editor:recent-folders')
       return raw ? (JSON.parse(raw) as string[]).slice(0, 5) : []
     } catch { return [] }
   })()
+
+  const startItems = [
+    { icon: 'lucide:folder-open', label: 'Open Folder', hint: '⌘O', action: () => window.dispatchEvent(new CustomEvent('open-folder')) },
+    { icon: 'lucide:file-plus', label: 'New File', hint: '⌘N', action: () => window.dispatchEvent(new CustomEvent('file-select', { detail: { path: 'untitled', sha: '' } })) },
+    { icon: 'lucide:search', label: 'Quick Open', hint: '⌘P', action: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', metaKey: true })) },
+    ...(isDesktop ? [{ icon: 'lucide:terminal', label: 'Open Terminal', hint: '⌘\`', action: () => window.dispatchEvent(new CustomEvent('toggle-terminal')) }] : []),
+  ]
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center bg-[var(--bg)] select-none">
@@ -95,12 +103,7 @@ function WelcomeView() {
         <div className="mb-6">
           <h2 className="text-[11px] font-medium text-[var(--text-disabled)] uppercase tracking-wider mb-2.5">Start</h2>
           <div className="flex flex-col gap-0.5">
-            {[
-              { icon: 'lucide:folder-open', label: 'Open Folder', hint: '⌘O', action: () => window.dispatchEvent(new CustomEvent('open-folder')) },
-              { icon: 'lucide:file-plus', label: 'New File', hint: '⌘N', action: () => window.dispatchEvent(new CustomEvent('file-select', { detail: { path: 'untitled', sha: '' } })) },
-              { icon: 'lucide:search', label: 'Quick Open', hint: '⌘P', action: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', metaKey: true })) },
-              { icon: 'lucide:terminal', label: 'Open Terminal', hint: '⌘\`', action: () => window.dispatchEvent(new CustomEvent('toggle-terminal')) },
-            ].map(item => (
+            {startItems.map(item => (
               <button
                 key={item.label}
                 onClick={item.action}

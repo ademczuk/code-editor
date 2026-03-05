@@ -6,6 +6,7 @@ import { useRepo } from '@/context/repo-context'
 import { useLocal } from '@/context/local-context'
 import { useEditor } from '@/context/editor-context'
 import { useGateway } from '@/context/gateway-context'
+import { isTauri } from '@/lib/tauri'
 
 type Tab = 'details' | 'files'
 
@@ -16,12 +17,14 @@ export function DetailsPanel() {
   const { status } = useGateway()
   const [tab, setTab] = useState<Tab>('details')
   const [editWidgets, setEditWidgets] = useState(false)
+  const [isDesktop, setIsDesktop] = useState(false)
+  useEffect(() => { setIsDesktop(isTauri()) }, [])
   
   const WIDGETS = [
     { id: 'workspace', icon: 'lucide:settings', label: 'Workspace' },
     { id: 'todos', icon: 'lucide:list-checks', label: 'To-dos' },
     { id: 'plan', icon: 'lucide:list-tree', label: 'Plan' },
-    { id: 'terminal', icon: 'lucide:terminal', label: 'Terminal' },
+    ...(isDesktop ? [{ id: 'terminal', icon: 'lucide:terminal', label: 'Terminal' }] : []),
     { id: 'changes', icon: 'lucide:git-commit-horizontal', label: 'Changes' },
     { id: 'gateway', icon: 'lucide:cpu', label: 'Gateway' },
     { id: 'openfiles', icon: 'lucide:files', label: 'Open Files' },
@@ -176,16 +179,17 @@ export function DetailsPanel() {
               <p className="text-[10px] text-[var(--text-disabled)]">No active plan</p>
             </Section>
 
-            {/* Terminal */}
-            <Section id="terminal" icon="lucide:terminal" title="Terminal">
-              <button
-                onClick={() => window.dispatchEvent(new CustomEvent('toggle-terminal'))}
-                className="flex items-center gap-1.5 px-2 py-1.5 rounded text-[10px] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer"
-              >
-                <Icon icon="lucide:plus" width={10} height={10} />
-                Open Terminal
-              </button>
-            </Section>
+            {isDesktop && (
+              <Section id="terminal" icon="lucide:terminal" title="Terminal">
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent('toggle-terminal'))}
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded text-[10px] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer"
+                >
+                  <Icon icon="lucide:plus" width={10} height={10} />
+                  Open Terminal
+                </button>
+              </Section>
+            )}
 
             {/* Changes */}
             <Section id="changes" icon="lucide:git-commit-horizontal" title={`Changes on ${branchName}`} badge={dirtyFiles.length || undefined}>

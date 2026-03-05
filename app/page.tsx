@@ -141,21 +141,25 @@ function SidebarPluginSlot() {
   const pluginsResize = usePanelResize('plugins')
   const pluginsWidth = layout.getSize('plugins')
   const entries = slots.sidebar
-  const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem('ce:sidebar-plugins-collapsed') === 'true' } catch { return false }
-  })
+  const [collapsed, setCollapsed] = useState(false)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('ce:sidebar-plugins-collapsed')
+      if (stored === 'true') setCollapsed(true)
+    } catch {}
+  }, [])
   useEffect(() => { try { localStorage.setItem('ce:sidebar-plugins-collapsed', String(collapsed)) } catch {} }, [collapsed])
 
   const sorted = useMemo(() => [...entries].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)), [entries])
   const enabledSorted = useMemo(() => sorted.filter(e => isPluginEnabled(e.id) && e.id !== pipPluginId), [sorted, isPluginEnabled, pipPluginId])
 
-  const [ratios, setRatios] = useState<Record<string, number>>(() => {
+  const [ratios, setRatios] = useState<Record<string, number>>({})
+  useEffect(() => {
     try {
       const raw = localStorage.getItem('ce:sidebar-plugin-ratios')
-      if (raw) return JSON.parse(raw)
+      if (raw) setRatios(JSON.parse(raw))
     } catch {}
-    return {}
-  })
+  }, [])
   useEffect(() => {
     try { localStorage.setItem('ce:sidebar-plugin-ratios', JSON.stringify(ratios)) } catch {}
   }, [ratios])
@@ -695,8 +699,9 @@ export default function EditorLayout() {
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 rounded-xl overflow-hidden border border-[var(--border)]">
         {/* View navigation bar — folder tabs */}
-        <div data-tauri-drag-region className={`flex items-center h-12 bg-[var(--bg-elevated)] shrink-0 px-3 gap-1.5 tauri-drag-region ${isMacTauri && sidebarCollapsed ? 'pl-20' : ''}`}>
-          {/* Folder-style tab strip */}
+        <div data-tauri-drag-region className={`flex items-center ${modeSpec.hideTabs ? 'h-10' : 'h-12'} bg-[var(--bg-elevated)] shrink-0 px-3 gap-1.5 tauri-drag-region ${isMacTauri && sidebarCollapsed ? 'pl-20' : ''}`}>
+          {/* Folder-style tab strip — hidden in TUI mode */}
+          {!modeSpec.hideTabs && (
           <div ref={tabContainerRef} className="folder-tab-strip tauri-no-drag">
             {visibleViews.map((v, i) => {
               const isActive = activeView === v
@@ -732,8 +737,43 @@ export default function EditorLayout() {
               style={{ opacity: indicatorStyle.width > 0 ? 1 : 0 }}
             />
           </div>
+          )}
+
+          {/* TUI mode: minimal header label */}
+          {modeSpec.hideTabs && (
+            <div className="flex items-center gap-2 tauri-no-drag">
+              <Icon icon="lucide:terminal" width={16} height={16} className="text-[var(--brand)]" />
+              <span className="text-[12px] font-medium text-[var(--text-secondary)]">Terminal</span>
+              {localRootPath && (
+                <span className="text-[11px] font-mono text-[var(--text-disabled)] ml-1 truncate max-w-[200px]">
+                  {localRootPath.split('/').pop()}
+                </span>
+              )}
+            </div>
+          )}
 
           <div className="flex-1 tauri-drag-region" data-tauri-drag-region />
+
+          {/* TUI: optional editor toggle */}
+          {modeSpec.terminalCenter && (
+            <button
+              onClick={() => {
+                // Toggle between terminal-only and showing the editor view underneath
+                if (terminalVisible) {
+                  layout.hide('terminal')
+                  setView('editor')
+                } else {
+                  layout.show('terminal')
+                }
+              }}
+              className={`tauri-no-drag p-2 rounded-lg hover:bg-[var(--bg-subtle)] cursor-pointer transition-colors ${
+                !terminalVisible ? 'text-[var(--brand)]' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)]'
+              }`}
+              title={terminalVisible ? 'Show Editor (⌘E)' : 'Back to Terminal'}
+            >
+              <Icon icon={terminalVisible ? 'lucide:code-2' : 'lucide:terminal'} width={18} height={18} />
+            </button>
+          )}
 
           <select
             value={mode}
@@ -752,6 +792,17 @@ export default function EditorLayout() {
           </button>
         </div>
 
+        {/* TUI mode: terminal fills center */}
+        {modeSpec.terminalCenter && terminalVisible ? (
+          <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden">
+            <TerminalPanel
+              visible={true}
+              height={9999}
+              onHeightChange={() => {}}
+            />
+          </div>
+        ) : (
+        <>
         {/* Active view with spatial slide transition */}
         <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden">
           <AnimatePresence mode="wait" custom={direction} initial={false}>
@@ -780,6 +831,8 @@ export default function EditorLayout() {
             </motion.div>
           </AnimatePresence>
         </div>
+        </>
+        )}
 
         {/* Terminal — docked (desktop) / drawer (mobile) / floating */}
         {!isMobile ? (

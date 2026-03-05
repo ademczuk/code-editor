@@ -11,6 +11,7 @@ import { useView } from '@/context/view-context'
 import { useLayout, usePanelResize } from '@/context/layout-context'
 import { EditorTabs } from '@/components/editor-tabs'
 import { FloatingPanel } from '@/components/floating-panel'
+import { isTauri } from '@/lib/tauri'
 
 const FileExplorer = dynamic(() => import('@/components/file-explorer').then(m => ({ default: m.FileExplorer })), { ssr: false })
 const CodeEditor = dynamic(() => import('@/components/code-editor').then(m => ({ default: m.CodeEditor })), { ssr: false })
@@ -33,6 +34,8 @@ export function EditorView() {
   const layout = useLayout()
   const isMobile = layout.isAtMost('lte768')
   const isNarrow = layout.isAtMost('lte992')
+  const [isDesktop, setIsDesktop] = useState(false)
+  useEffect(() => { setIsDesktop(isTauri()) }, [])
 
   // Derived from layout context
   const treeVisible = layout.isVisible('tree')
@@ -128,13 +131,15 @@ export function EditorView() {
           >
             <Icon icon="lucide:folder" width={18} height={18} />
           </button>
-          <button
-            onClick={() => window.dispatchEvent(new CustomEvent('toggle-terminal'))}
-            className="mt-1.5 p-2.5 rounded-xl hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] transition-colors cursor-pointer"
-            title="Terminal (⌘J)"
-          >
-            <Icon icon="lucide:terminal" width={18} height={18} />
-          </button>
+          {isDesktop && (
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('toggle-terminal'))}
+              className="mt-1.5 p-2.5 rounded-xl hover:bg-[var(--bg-subtle)] text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] transition-colors cursor-pointer"
+              title="Terminal (⌘J)"
+            >
+              <Icon icon="lucide:terminal" width={18} height={18} />
+            </button>
+          )}
         </div>
       ) : (
         <>
@@ -217,7 +222,7 @@ export function EditorView() {
 
                 {/* Quick action grid */}
                 <div className="grid grid-cols-2 gap-3 w-[380px]">
-                  {QUICK_ACTIONS.map((item) => (
+                  {QUICK_ACTIONS.filter(a => a.event !== 'toggle-terminal' || isDesktop).map((item) => (
                     <button
                       key={item.label}
                       onClick={() => handleQuickAction(item.event)}
