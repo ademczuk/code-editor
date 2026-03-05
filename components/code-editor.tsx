@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import React, { type ReactNode, useCallback, useEffect, useRef, useState, Component } from 'react'
 import Editor, { type OnMount, type BeforeMount } from '@monaco-editor/react'
 import loader from '@monaco-editor/loader'
 import { Icon } from '@iconify/react'
@@ -67,6 +67,30 @@ if (typeof window !== 'undefined') {
       return
     }
   }, true)
+}
+
+class MonacoErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false }
+
+  static getDerivedStateFromError(error: unknown) {
+    if (isAbortError(error)) return null
+    return { hasError: true }
+  }
+
+  componentDidCatch(error: unknown) {
+    if (isAbortError(error)) return
+    console.error('[Monaco] Uncaught error:', error)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <div className="h-full w-full bg-[var(--bg)]" />
+    }
+    return this.props.children
+  }
 }
 
 function WelcomeView() {
@@ -558,10 +582,16 @@ export function CodeEditor() {
         (method, params) => sendRequest(method, params) as Promise<unknown>
       )
 
-      completionsDisposable.current = monaco.languages.registerInlineCompletionsProvider(
+      const disposable = monaco.languages.registerInlineCompletionsProvider(
         { pattern: '**' },
         provider
       )
+
+      if (disposed) {
+        disposable.dispose()
+        return
+      }
+      completionsDisposable.current = disposable
     })()
 
     return () => {
@@ -724,37 +754,39 @@ export function CodeEditor() {
 
   const monacoEditor = (
     monacoReady ? (
-      <Editor
-        key={file?.path}
-        path={file?.path}
-        height="100%"
-        defaultValue={file?.content}
-        language={file?.language}
-        theme="code-editor"
-        onChange={handleChange}
-        beforeMount={handleBeforeMount}
-        onMount={handleMount}
-        options={{
-          fontSize: 13,
-          fontFamily: (typeof window !== 'undefined' ? getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim() : '') || "'JetBrains Mono', monospace",
-          fontLigatures: true,
-          minimap: { enabled: false },
-          scrollBeyondLastLine: false,
-          padding: { top: 12 },
-          lineNumbers: 'on',
-          renderLineHighlight: 'line',
-          bracketPairColorization: { enabled: true },
-          guides: { indentation: true, bracketPairs: true },
-          smoothScrolling: true,
-          cursorBlinking: 'smooth',
-          cursorSmoothCaretAnimation: 'on',
-          tabSize: 2,
-          wordWrap: 'on',
-          automaticLayout: true,
-          readOnly,
-          domReadOnly: readOnly,
-        }}
-      />
+      <MonacoErrorBoundary>
+        <Editor
+          key={file?.path}
+          path={file?.path}
+          height="100%"
+          defaultValue={file?.content}
+          language={file?.language}
+          theme="code-editor"
+          onChange={handleChange}
+          beforeMount={handleBeforeMount}
+          onMount={handleMount}
+          options={{
+            fontSize: 13,
+            fontFamily: (typeof window !== 'undefined' ? getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim() : '') || "'JetBrains Mono', monospace",
+            fontLigatures: true,
+            minimap: { enabled: false },
+            scrollBeyondLastLine: false,
+            padding: { top: 12 },
+            lineNumbers: 'on',
+            renderLineHighlight: 'line',
+            bracketPairColorization: { enabled: true },
+            guides: { indentation: true, bracketPairs: true },
+            smoothScrolling: true,
+            cursorBlinking: 'smooth',
+            cursorSmoothCaretAnimation: 'on',
+            tabSize: 2,
+            wordWrap: 'on',
+            automaticLayout: true,
+            readOnly,
+            domReadOnly: readOnly,
+          }}
+        />
+      </MonacoErrorBoundary>
     ) : (
       <div className="h-full w-full bg-[var(--bg)]" />
     )
