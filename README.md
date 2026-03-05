@@ -39,12 +39,20 @@ A lightweight, AI-native code editor powered by [OpenClaw](https://github.com/op
 
 ### Desktop (macOS)
 
-Download the [latest release](https://github.com/OpenKnots/code-editor/releases/latest) (.dmg), or build from source:
+Download the [latest release](https://github.com/OpenKnots/code-editor/releases/latest) (.dmg).
+
+After installing, macOS may show _"KnotCode is damaged"_ — this is because the app isn't notarized with Apple (yet). Fix it with:
+
+```bash
+xattr -cr /Applications/KnotCode.app
+```
+
+Or build from source:
 
 ```bash
 pnpm install
-pnpm run:desktop          # dev mode (Tauri + hot reload)
-pnpm run:desktop --build  # production build (.app + .dmg)
+pnpm desktop:dev          # dev mode (Tauri + hot reload)
+pnpm desktop:build        # production build (.app + .dmg)
 ```
 
 > First Tauri build takes 2-5 minutes (compiling Rust deps). Subsequent builds are fast.
