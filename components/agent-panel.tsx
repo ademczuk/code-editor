@@ -1642,44 +1642,48 @@ export function AgentPanel() {
         contextTokens={contextTokens}
       />
       {messages.length > 0 && (
-        <div className="flex items-center justify-between px-3 py-0.5 border-b border-[var(--border)] bg-[var(--bg-elevated)] shrink-0">
-          <div className="flex items-center gap-1">
+        <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1 shrink-0">
+          <div className="flex min-w-0 items-center gap-1.5">
             {/* Font size controls */}
-            <button
-              onClick={decreaseFontSize}
-              className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer"
-              title="Decrease text size (⌘-)"
-            >
-              <Icon icon="lucide:minus" width={12} height={12} />
-            </button>
-            <span className="text-[9px] font-mono text-[var(--text-disabled)] w-5 text-center tabular-nums select-none">
-              {chatFontSize}
-            </span>
-            <button
-              onClick={increaseFontSize}
-              className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer"
-              title="Increase text size (⌘+)"
-            >
-              <Icon icon="lucide:plus" width={12} height={12} />
-            </button>
+            <div className="inline-flex items-center gap-0.5">
+              <button
+                onClick={decreaseFontSize}
+                className="flex h-5 w-5 items-center justify-center rounded text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer"
+                title="Decrease text size (⌘-)"
+              >
+                <Icon icon="lucide:minus" width={12} height={12} />
+              </button>
+              <span className="w-6 select-none text-center text-[9px] font-mono tabular-nums text-[var(--text-disabled)]">
+                {chatFontSize}
+              </span>
+              <button
+                onClick={increaseFontSize}
+                className="flex h-5 w-5 items-center justify-center rounded text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer"
+                title="Increase text size (⌘+)"
+              >
+                <Icon icon="lucide:plus" width={12} height={12} />
+              </button>
+            </div>
 
-            <span className="w-px h-3.5 bg-[var(--border)] mx-1" />
+            <span className="mx-0.5 h-3.5 w-px bg-[var(--border)]" />
 
             {/* Font family picker */}
-            {FONT_OPTIONS.map((f) => (
-              <button
-                key={f.id}
-                onClick={() => setChatFontFamily(f.id)}
-                className={`px-1.5 py-0.5 rounded text-[9px] font-medium transition-colors cursor-pointer ${
-                  chatFontFamily === f.id
-                    ? 'text-[var(--brand)] bg-[color-mix(in_srgb,var(--brand)_10%,transparent)]'
-                    : 'text-[var(--text-disabled)] hover:text-[var(--text-tertiary)]'
-                }`}
-                title={`${f.label} font`}
-              >
-                {f.label}
-              </button>
-            ))}
+            <div className="flex min-w-0 items-center gap-0.5">
+              {FONT_OPTIONS.map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => setChatFontFamily(f.id)}
+                  className={`whitespace-nowrap rounded px-1.5 py-[2px] text-[9px] font-medium transition-colors cursor-pointer ${
+                    chatFontFamily === f.id
+                      ? 'text-[var(--brand)] bg-[color-mix(in_srgb,var(--brand)_10%,transparent)]'
+                      : 'text-[var(--text-disabled)] hover:text-[var(--text-tertiary)]'
+                  }`}
+                  title={`${f.label} font`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
           </div>
           <button
             onClick={handleClear}

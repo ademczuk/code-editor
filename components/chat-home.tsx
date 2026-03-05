@@ -192,11 +192,11 @@ export const ChatHome = memo(function ChatHome({
   return (
     <div className="flex-1 overflow-y-auto relative">
       <KnotBackground />
-      <div className="min-h-full w-full max-w-[720px] mx-auto flex flex-col justify-center px-6 py-12 relative z-[1]">
+      <div className="min-h-full w-full max-w-[720px] mx-auto flex flex-col justify-center px-4 sm:px-6 py-8 sm:py-10 md:py-12 relative z-[1]">
         {/* Header — "Let's build" */}
-        <div className="flex flex-col items-center mb-8">
+        <div className="flex flex-col items-center mb-6 sm:mb-7">
           <div
-            className={`mb-4 ${
+            className={`mb-3 ${
               status === 'connected' ? 'logo-breathe-connected' : 'logo-breathe-idle'
             }`}
           >
@@ -210,7 +210,7 @@ export const ChatHome = memo(function ChatHome({
           {/* Workspace dropdown */}
           <button
             onClick={onSelectFolder}
-            className="codex-workspace-dropdown mt-3 inline-flex items-center gap-1.5 text-[14px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+            className="codex-workspace-dropdown mt-2.5 inline-flex items-center gap-1.5 text-[14px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
           >
             {repoShort ?? 'Select workspace'}
             <Icon icon="lucide:chevron-down" width={14} height={14} className="opacity-50" />
@@ -218,7 +218,7 @@ export const ChatHome = memo(function ChatHome({
         </div>
 
         {/* "Explore more" link */}
-        <div className="flex justify-end mb-3">
+        <div className="flex justify-end mb-2">
           <button
             onClick={() => emit('open-folder')}
             className="text-[12px] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] transition-colors cursor-pointer"
@@ -227,36 +227,31 @@ export const ChatHome = memo(function ChatHome({
           </button>
         </div>
 
-        {/* Suggestion cards — 2-up, center odd last card */}
-        <div className="codex-suggestion-grid flex flex-wrap gap-3 mb-6">
-          {suggestions.map((card, i) => {
-            const isOddTail =
-              suggestions.length > 1 && suggestions.length % 2 === 1 && i === suggestions.length - 1
-
-            return (
-              <button
-                key={i}
-                onClick={() => onSend(card.label, agentMode)}
-                className={`codex-suggestion-card group flex flex-col gap-3 p-4 rounded-xl text-left cursor-pointer border border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-elevated)_70%,transparent)] backdrop-blur-sm hover:border-[var(--text-disabled)] transition-all w-full sm:w-[calc(50%-0.375rem)] ${isOddTail ? 'sm:mx-auto' : ''}`}
+        {/* Suggestion cards — 1-up mobile, 3-up desktop */}
+        <div className="codex-suggestion-grid grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 mb-4 sm:mb-5">
+          {suggestions.map((card, i) => (
+            <button
+              key={i}
+              onClick={() => onSend(card.label, agentMode)}
+              className="codex-suggestion-card group flex flex-col gap-2.5 p-3.5 sm:p-4 rounded-xl text-left cursor-pointer border border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-elevated)_70%,transparent)] backdrop-blur-sm hover:border-[var(--text-disabled)] transition-all w-full"
+            >
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                style={{ background: card.bg }}
               >
-                <div
-                  className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                  style={{ background: card.bg }}
-                >
-                  <Icon
-                    icon={card.icon}
-                    width={16}
-                    height={16}
-                    style={{ color: card.color }}
-                    className="opacity-80 group-hover:opacity-100 transition-opacity"
-                  />
-                </div>
-                <p className="text-[12px] text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] leading-relaxed transition-colors">
-                  {card.label}
-                </p>
-              </button>
-            )
-          })}
+                <Icon
+                  icon={card.icon}
+                  width={16}
+                  height={16}
+                  style={{ color: card.color }}
+                  className="opacity-80 group-hover:opacity-100 transition-opacity"
+                />
+              </div>
+              <p className="text-[12px] text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] leading-relaxed transition-colors">
+                {card.label}
+              </p>
+            </button>
+          ))}
         </div>
 
         {/* Composer */}
@@ -286,7 +281,7 @@ export const ChatHome = memo(function ChatHome({
                 : 'Describe what you want to build…'
             }
             aria-label="Chat input"
-            className="w-full bg-transparent px-4 pt-4 pb-2 text-[14px] leading-[1.6] text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] outline-none resize-none min-h-[48px] max-h-[200px] overflow-y-auto"
+            className="w-full bg-transparent px-4 pt-3.5 pb-2 text-[14px] leading-[1.6] text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] outline-none resize-none min-h-[48px] max-h-[200px] overflow-y-auto"
           />
 
           {/* Image previews */}
@@ -313,7 +308,7 @@ export const ChatHome = memo(function ChatHome({
           )}
 
           {/* Bottom toolbar — Codex-style pill bar */}
-          <div className="px-3 pb-3 pt-1">
+          <div className="px-3 pb-2.5 pt-1">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 flex-wrap">
                 {/* + button */}
@@ -377,7 +372,7 @@ export const ChatHome = memo(function ChatHome({
 
         {/* Workspace setup (no workspace) */}
         {!hasWorkspace && (
-          <div className="mt-8 space-y-4">
+          <div className="mt-6 sm:mt-8 space-y-3 sm:space-y-4">
             <div className="h-px bg-[var(--border)]" />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
@@ -427,7 +422,7 @@ export const ChatHome = memo(function ChatHome({
         )}
 
         {/* Footer */}
-        <div className="mt-8 flex justify-center">
+        <div className="mt-6 sm:mt-8 flex justify-center">
           <span className="text-[10px] font-mono tracking-[0.08em] text-[var(--text-disabled)] opacity-40 uppercase">
             KnotCode
           </span>

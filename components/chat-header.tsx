@@ -34,7 +34,7 @@ export function ChatHeader({
   return (
     <div className="shrink-0">
       <div className="flex items-center justify-between h-10 px-3 border-b border-[var(--border)] bg-[var(--bg-elevated)]">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex flex-1 min-w-0 items-center gap-2">
           {/* Streaming status indicator */}
           {isStreaming ? (
             <span className="relative flex h-2.5 w-2.5 shrink-0">
@@ -54,19 +54,19 @@ export function ChatHeader({
           </span>
           {repoName && (
             <>
-              <span className="text-[var(--text-disabled)]">&middot;</span>
-              <div className="flex items-center gap-1.5 shrink-0">
+              <span className="shrink-0 text-[var(--text-disabled)]">&middot;</span>
+              <div className="flex min-w-0 items-center gap-1.5">
                 <Icon
                   icon="lucide:git-branch"
                   width={12}
                   height={12}
-                  className="text-[var(--text-disabled)]"
+                  className="shrink-0 text-[var(--text-disabled)]"
                 />
-                <span className="text-[12px] font-mono text-[var(--text-tertiary)]">
+                <span className="max-w-[180px] truncate text-[12px] font-mono text-[var(--text-tertiary)]">
                   {repoName}
                 </span>
                 {branchName && (
-                  <span className="text-[11px] font-mono text-[var(--text-disabled)]">
+                  <span className="max-w-[120px] truncate whitespace-nowrap text-[11px] font-mono text-[var(--text-disabled)]">
                     /{branchName}
                   </span>
                 )}
@@ -74,18 +74,22 @@ export function ChatHeader({
             </>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="ml-2 flex shrink-0 items-center gap-1.5">
           {/* Model badge */}
           {modelName && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-mono bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] border border-[color-mix(in_srgb,var(--brand)_15%,transparent)] text-[var(--text-tertiary)]">
+            <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-[color-mix(in_srgb,var(--brand)_15%,transparent)] bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] px-2 py-0.5 text-[9px] font-mono text-[var(--text-tertiary)]">
               <Icon icon="lucide:sparkles" width={9} height={9} className="text-[var(--brand)]" />
-              {modelName
-                .replace(/^.*\//, '')
-                .replace(/(claude-|gpt-)/, '')
-                .slice(0, 16)}
+              <span className="max-w-[90px] truncate">
+                {modelName
+                  .replace(/^.*\//, '')
+                  .replace(/(claude-|gpt-)/, '')
+                  .slice(0, 16)}
+              </span>
             </span>
           )}
-          <span className="text-[11px] text-[var(--text-disabled)]">{messageCount} messages</span>
+          <span className="whitespace-nowrap text-[11px] text-[var(--text-disabled)]">
+            {messageCount} messages
+          </span>
         </div>
       </div>
 

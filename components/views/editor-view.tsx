@@ -12,6 +12,7 @@ import { useLayout, usePanelResize } from '@/context/layout-context'
 import { EditorTabs } from '@/components/editor-tabs'
 import { FloatingPanel } from '@/components/floating-panel'
 import { KnotLogo } from '@/components/knot-logo'
+import { KnotBackground } from '@/components/knot-background'
 import { isTauri } from '@/lib/tauri'
 import { emit } from '@/lib/events'
 
@@ -142,7 +143,7 @@ export function EditorView() {
   )
 
   return (
-    <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden relative">
+    <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden relative bg-[var(--sidebar-bg)]">
       {/* ── Editor collapsed: narrow toggle strip ── */}
       {editorCollapsed ? (
         <div className="flex flex-col items-center w-[52px] shrink-0 bg-[var(--bg-elevated)] border-r border-[var(--border)]">
@@ -250,12 +251,8 @@ export function EditorView() {
               </>
             ) : (
               <div className="welcome-screen flex-1 flex flex-col items-center justify-center relative overflow-hidden select-none">
-                {/* Ambient background effects */}
-                <div className="absolute inset-0 pointer-events-none">
-                  <div className="welcome-orb welcome-orb--primary" />
-                  <div className="welcome-orb welcome-orb--secondary" />
-                  <div className="welcome-grid" />
-                </div>
+                {/* Match chat background styling for visual consistency */}
+                <KnotBackground />
 
                 <div className="relative z-10 flex flex-col items-center gap-8 max-w-[480px] px-6">
                   {/* Logo hero */}
