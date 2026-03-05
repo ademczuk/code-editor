@@ -103,6 +103,7 @@ export const PluginSlotRenderer = memo(function PluginSlotRenderer({ slot }: { s
 
   const PLUGIN_GROUP_PREFIX: Record<string, string> = {
     'spotify-status-bar': 'spotify-player',
+    'spotify-settings': 'spotify-player',
     'youtube-status-bar': 'youtube-player',
   }
 
