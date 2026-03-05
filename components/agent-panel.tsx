@@ -1648,17 +1648,17 @@ export function AgentPanel() {
             <div className="inline-flex items-center gap-0.5">
               <button
                 onClick={decreaseFontSize}
-                className="flex h-5 w-5 items-center justify-center rounded text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer"
+                className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer"
                 title="Decrease text size (⌘-)"
               >
                 <Icon icon="lucide:minus" width={12} height={12} />
               </button>
-              <span className="w-6 select-none text-center text-[9px] font-mono tabular-nums text-[var(--text-disabled)]">
+              <span className="w-7 select-none text-center text-[10px] font-mono tabular-nums text-[var(--text-disabled)]">
                 {chatFontSize}
               </span>
               <button
                 onClick={increaseFontSize}
-                className="flex h-5 w-5 items-center justify-center rounded text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer"
+                className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer"
                 title="Increase text size (⌘+)"
               >
                 <Icon icon="lucide:plus" width={12} height={12} />
@@ -1673,7 +1673,7 @@ export function AgentPanel() {
                 <button
                   key={f.id}
                   onClick={() => setChatFontFamily(f.id)}
-                  className={`whitespace-nowrap rounded px-1.5 py-[2px] text-[9px] font-medium transition-colors cursor-pointer ${
+                  className={`whitespace-nowrap rounded px-2 py-0.5 text-[10px] font-medium transition-colors cursor-pointer ${
                     chatFontFamily === f.id
                       ? 'text-[var(--brand)] bg-[color-mix(in_srgb,var(--brand)_10%,transparent)]'
                       : 'text-[var(--text-disabled)] hover:text-[var(--text-tertiary)]'

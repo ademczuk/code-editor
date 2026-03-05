@@ -29,7 +29,7 @@ export const FONT_OPTIONS: { id: ChatFontFamily; label: string }[] = [
 const STORAGE_KEY = 'code-editor:chat-appearance'
 const MIN_FONT_SIZE = 10
 const MAX_FONT_SIZE = 22
-const DEFAULT_FONT_SIZE = 12
+const DEFAULT_FONT_SIZE = 14
 
 interface ChatAppearanceState {
   chatFontSize: number

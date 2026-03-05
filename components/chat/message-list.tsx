@@ -27,10 +27,14 @@ interface MessageListProps {
 
 function parsePlanSteps(text: string): PlanStep[] {
   const steps: PlanStep[] = []
+  const seenByNumber = new Map<string, number>()
   const matches = text.matchAll(/^(\d+)\.\s+\*{0,2}([^*]+?)\*{0,2}\s*$/gm)
   for (const m of matches) {
+    const stepNumber = m[1]
+    const seenCount = (seenByNumber.get(stepNumber) ?? 0) + 1
+    seenByNumber.set(stepNumber, seenCount)
     steps.push({
-      id: `step-${m[1]}`,
+      id: `step-${stepNumber}-${seenCount}`,
       title: m[2].trim(),
       description: undefined,
       status: 'pending',
@@ -82,9 +86,9 @@ function CollapsibleMessage({ content, children }: { content: string; children: 
       {collapsed && (
         <button
           onClick={() => setCollapsed(false)}
-          className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-medium bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] shadow-sm transition-colors cursor-pointer"
+          className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-medium bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] shadow-sm transition-colors cursor-pointer"
         >
-          <Icon icon="lucide:chevron-down" width={10} height={10} />
+          <Icon icon="lucide:chevron-down" width={11} height={11} />
           Show more
         </button>
       )}
@@ -257,7 +261,7 @@ export function MessageList({
                   <div className="message-avatar-ring">
                     <KnotLogo size={12} className="text-[var(--brand)]" />
                   </div>
-                  <span className="text-[9px] font-medium text-[var(--text-tertiary)]">Knot</span>
+                  <span className="text-[10px] font-medium text-[var(--text-tertiary)]">Knot</span>
                 </div>
               )}
 
@@ -405,11 +409,11 @@ export function MessageList({
                         }}
                       >
                         {t === 'edit' && isAssistant && (
-                          <div className="flex items-center gap-1.5 mb-1.5 text-[10px] text-[var(--color-additions,#22c55e)] font-medium">
+                          <div className="flex items-center gap-1.5 mb-1.5 text-[11px] text-[var(--color-additions,#22c55e)] font-medium">
                             <Icon icon="lucide:file-diff" width={12} height={12} />
                             File changes proposed
                             {editSummaries.has(msg.id) && (
-                              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-[color-mix(in_srgb,var(--color-additions,#22c55e)_10%,transparent)] text-[9px]">
+                              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-[color-mix(in_srgb,var(--color-additions,#22c55e)_10%,transparent)] text-[10px]">
                                 {editSummaries.get(msg.id)}
                               </span>
                             )}
@@ -432,14 +436,14 @@ export function MessageList({
 
               {/* Response metadata — time + token estimate on hover */}
               <div className="flex items-center gap-2 mt-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity">
-                <span className="text-[8px] text-[var(--text-disabled)] font-mono">
+                <span className="text-[9px] text-[var(--text-disabled)] font-mono">
                   {new Date(msg.timestamp).toLocaleTimeString([], {
                     hour: '2-digit',
                     minute: '2-digit',
                   })}
                 </span>
                 {isAssistant && (
-                  <span className="text-[8px] text-[var(--text-disabled)] font-mono">
+                  <span className="text-[9px] text-[var(--text-disabled)] font-mono">
                     ~{estimateTokens(msg.content).toLocaleString()} tokens
                   </span>
                 )}
@@ -452,7 +456,7 @@ export function MessageList({
                     <div key={i} className="flex items-center gap-1 flex-wrap">
                       <button
                         onClick={() => onQuickApply(proposal)}
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-medium border transition-colors cursor-pointer"
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors cursor-pointer"
                         style={{
                           borderColor:
                             'color-mix(in srgb, var(--color-additions) 40%, transparent)',
@@ -462,15 +466,15 @@ export function MessageList({
                         }}
                         title="Apply changes to editor"
                       >
-                        <Icon icon="lucide:play" width={12} height={12} />
+                        <Icon icon="lucide:play" width={13} height={13} />
                         Apply to {proposal.filePath.split('/').pop()}
                       </button>
                       <button
                         onClick={() => onShowDiff(proposal, msg.id)}
-                        className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium transition-colors cursor-pointer text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                        className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                         title="Review changes in diff viewer first"
                       >
-                        <Icon icon="lucide:git-compare" width={12} height={12} />
+                        <Icon icon="lucide:git-compare" width={13} height={13} />
                         Diff
                       </button>
                     </div>
@@ -495,7 +499,7 @@ export function MessageList({
                   return (
                     <span
                       key={i}
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-medium border transition-all ${
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-all ${
                         isLast
                           ? 'border-[color-mix(in_srgb,var(--brand)_30%,var(--border))] bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] text-[var(--brand)]'
                           : 'border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-disabled)]'
@@ -503,8 +507,8 @@ export function MessageList({
                     >
                       <Icon
                         icon={isLast ? getToolIcon(step) : 'lucide:check'}
-                        width={9}
-                        height={9}
+                        width={10}
+                        height={10}
                       />
                       {step}
                     </span>
@@ -520,7 +524,7 @@ export function MessageList({
                   <div className="message-avatar-ring">
                     <KnotLogo size={12} className="text-[var(--brand)]" />
                   </div>
-                  <span className="text-[9px] font-medium text-[var(--text-tertiary)]">Knot</span>
+                  <span className="text-[10px] font-medium text-[var(--text-tertiary)]">Knot</span>
                 </div>
                 <div
                   className="rounded-xl px-3 py-2 leading-relaxed bg-[var(--bg-subtle)] border border-[color-mix(in_srgb,var(--brand)_20%,var(--border))] text-[var(--text-primary)] rounded-bl-sm"
@@ -538,7 +542,7 @@ export function MessageList({
                 {thinkingTrail.length > 0 && (
                   <details className="thinking-disclosure mb-1" open={thinkingOpen}>
                     <summary
-                      className="text-[10px] text-[var(--text-tertiary)] select-none"
+                      className="text-[11px] text-[var(--text-tertiary)] select-none"
                       onClick={(e) => {
                         e.preventDefault()
                         setThinkingOpen((v) => !v)
@@ -560,7 +564,7 @@ export function MessageList({
                         return (
                           <div
                             key={i}
-                            className="flex items-center gap-2 text-[10px] py-0.5 plan-step-enter"
+                            className="flex items-center gap-2 text-[11px] py-0.5 plan-step-enter"
                             style={{
                               opacity: isLast ? 1 : Math.max(0.3, 1 - age * 0.2),
                               transition: 'all 0.3s ease',
@@ -578,8 +582,8 @@ export function MessageList({
                             </div>
                             <Icon
                               icon={getToolIcon(step)}
-                              width={10}
-                              height={10}
+                              width={11}
+                              height={11}
                               className={`shrink-0 ${isLast ? 'text-[var(--brand)]' : 'text-[var(--text-disabled)]'}`}
                             />
                             <span
@@ -600,7 +604,7 @@ export function MessageList({
                     <span />
                     <span />
                   </div>
-                  <span className="text-[10px] text-[var(--text-tertiary)]">
+                  <span className="text-[11px] text-[var(--text-tertiary)]">
                     {thinkingTrail.length > 0
                       ? thinkingTrail[thinkingTrail.length - 1]
                       : 'Thinking...'}
@@ -619,12 +623,12 @@ export function MessageList({
           return (
             <button
               onClick={() => setShowSystemMessages((v) => !v)}
-              className="mx-auto flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] transition-colors cursor-pointer"
+              className="mx-auto flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] text-[var(--text-disabled)] hover:text-[var(--text-tertiary)] transition-colors cursor-pointer"
             >
               <Icon
                 icon={showSystemMessages ? 'lucide:eye-off' : 'lucide:eye'}
-                width={9}
-                height={9}
+                width={10}
+                height={10}
               />
               {showSystemMessages ? 'Hide' : 'Show'} {hiddenCount} system{' '}
               {hiddenCount === 1 ? 'message' : 'messages'}

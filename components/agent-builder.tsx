@@ -126,7 +126,7 @@ const PERSONA_PRESETS: PersonaPreset[] = [
   },
   {
     id: 'openclaw-dev',
-    emoji: '\u{1F41E}',
+    emoji: '\u{1F99E}',
     name: 'OpenClaw Dev',
     description:
       'Docs-aware OpenClaw ecosystem agent. PR workflows, issue triage, architecture review.',

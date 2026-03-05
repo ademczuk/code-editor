@@ -53,8 +53,16 @@ function FileRow({
         : 'var(--warning, #eab308)'
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSelect()
+        }
+      }}
       className={`codex-git-file group flex items-center gap-2 px-3 py-1.5 rounded-md text-left w-full transition-colors cursor-pointer ${
         isSelected
           ? 'bg-[color-mix(in_srgb,var(--brand)_10%,transparent)]'
@@ -112,7 +120,7 @@ function FileRow({
           </button>
         )}
       </div>
-    </button>
+    </div>
   )
 }
 
