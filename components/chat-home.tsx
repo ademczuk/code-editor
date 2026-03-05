@@ -292,8 +292,8 @@ export const ChatHome = memo(function ChatHome({ onSend, onSelectFolder, onClone
   }, [hasWorkspace, openFiles, local.localTree])
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-start px-4 sm:px-6 pt-8 sm:pt-10 pb-8 overflow-y-auto">
-      <div className="w-full max-w-[700px]">
+    <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-8 sm:py-10">
+      <div className="min-h-full w-full max-w-[700px] mx-auto flex flex-col justify-center">
         {/* Logo + Heading */}
         <div className="flex flex-col items-center mb-5">
           <div

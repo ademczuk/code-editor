@@ -946,24 +946,7 @@
   --color-ai-hover-bg: rgba(0, 0, 0, 0.04);
 }
 
-/* Light-mode overrides for hardcoded dark values */
-[data-theme='obsidian']:not(.dark) .prose-chat code,
-[data-theme='bone']:not(.dark) .prose-chat code,
-[data-theme='neon']:not(.dark) .prose-chat code,
-[data-theme='catppuccin-mocha']:not(.dark) .prose-chat code,
-[data-theme='voodoo']:not(.dark) .prose-chat code,
-[data-theme='cybernord']:not(.dark) .prose-chat code,
-[data-theme='prettypink']:not(.dark) .prose-chat code {
-  background: rgba(0, 0, 0, 0.04);
-  border-color: var(--border);
-}
-[data-theme='obsidian']:not(.dark) .prose-chat th,
-[data-theme='bone']:not(.dark) .prose-chat th,
-[data-theme='neon']:not(.dark) .prose-chat th,
-[data-theme='catppuccin-mocha']:not(.dark) .prose-chat th,
-[data-theme='prettypink']:not(.dark) .prose-chat th {
-  background: rgba(0, 0, 0, 0.03);
-}
+/* Light-mode .prose-chat overrides no longer needed — base rules use theme vars */
 
 /* ──────────────────────────────────────────────────────────────────
    Base
@@ -2563,7 +2546,8 @@ p {
   text-decoration: none;
   font-weight: 500;
   color: var(--text-primary);
-  background: var(--bg-subtle);
+  background: var(--bg);
+  border: 1px solid var(--border);
   padding: 0.05em 0.35em;
   border-radius: 4px;
   transition:
@@ -2608,8 +2592,9 @@ p {
   font-size: 0.9em;
   padding: 0.15em 0.35em;
   border-radius: 4px;
-  background: var(--bg-subtle);
-  color: var(--text-secondary);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
 }
 
 .md-preview pre {
@@ -2632,6 +2617,7 @@ p {
   margin: 0.75em 0;
   padding: 0.5em 1em;
   border-left: 3px solid var(--border);
+  background: var(--bg);
   color: var(--text-secondary);
 }
 
@@ -2660,7 +2646,7 @@ p {
 }
 .md-preview th {
   font-weight: 600;
-  background: var(--bg-subtle);
+  background: var(--bg);
 }
 
 /* ──────────────────────────────────────────────────────────────────
@@ -2767,14 +2753,16 @@ p {
   font-size: 11px;
   padding: 1px 5px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  background: var(--bg);
   border: 1px solid var(--border);
 }
 .prose-chat pre {
   margin: 0.5em 0;
   padding: 8px 10px;
   border-radius: 6px;
-  background: var(--bg-subtle);
+  color: var(--text-primary);
+  background: var(--bg);
   border: 1px solid var(--border);
   overflow-x: auto;
   font-size: 11px;
@@ -2838,12 +2826,14 @@ p {
 }
 .prose-chat th {
   font-weight: 600;
-  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  background: var(--bg);
 }
 .prose-chat blockquote {
   border-left: 2px solid var(--border);
   padding-left: 10px;
   margin: 0.4em 0;
+  background: var(--bg);
   color: var(--text-secondary);
 }
 
@@ -2878,6 +2868,11 @@ p {
 }
 .prose-chat .md-preview li {
   margin: 0.25em 0;
+  color: var(--text-primary);
+}
+
+/* Terminal markdown should remain readable on tinted RPC/chat cards */
+.terminal-md {
   color: var(--text-primary);
 }
 

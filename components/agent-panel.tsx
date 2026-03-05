@@ -155,6 +155,12 @@ function AgentConnectPrompt() {
   )
 }
 
+function buildGatewayMessage(message: string, context?: string): string {
+  const trimmedContext = context?.trim()
+  if (!trimmedContext) return message
+  return `${message}\n\n[Additional Context]\n${trimmedContext}`
+}
+
 export function AgentPanel() {
   const { sendRequest, onEvent, status } = useGateway()
   const { files, activeFile, getFile, openFile, updateFileContent } = useEditor()
@@ -1032,7 +1038,7 @@ export function AgentPanel() {
           : agentMode === 'plan'
             ? '[Mode: Plan — outline a step-by-step plan before making changes. Present the plan to the user for approval before executing.]\n'
             : '[Mode: Agent — make direct code changes and edits autonomously.]\n'
-      // Build silent context (not shown in chat, passed separately to gateway)
+      // Build silent context (not shown in chat UI, embedded in outbound gateway message)
       const silentContext = [modePrefix, context || '', attachCtx].filter(Boolean).join('\n\n')
       setContextAttachments([])
       setImageAttachments([])
@@ -1046,10 +1052,10 @@ export function AgentPanel() {
         promptChars: text.length,
         contextChars: silentContext.length,
       })
+      const outboundMessage = buildGatewayMessage(text, silentContext)
       const resp = (await sendRequest('chat.send', {
         sessionKey,
-        message: text,
-        context: silentContext,
+        message: outboundMessage,
         idempotencyKey: idemKey,
       })) as Record<string, unknown> | undefined
 
@@ -1197,8 +1203,7 @@ export function AgentPanel() {
 
       sendRequest('chat.send', {
         sessionKey,
-        message: prompt,
-        context: context || undefined,
+        message: buildGatewayMessage(prompt, context),
         idempotencyKey: idemKey,
       })
         .then((resp) => {
